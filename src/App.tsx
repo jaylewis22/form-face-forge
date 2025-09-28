@@ -23,7 +23,7 @@ const App = () => (
           <Route path="/roster" element={<Roster />} />
           <Route path="/players" element={<Players />} />
           <Route path="/teams" element={<Teams />} />
-          <Route path="/trophies" element={<PlaceholderPage title="Trophies" />} />
+          <Route path="/trophies" element={<PlaceholderPage title="Leagues" />} />
           <Route path="/schedule" element={<PlaceholderPage title="Schedule Editor" />} />
           <Route path="/settings" element={<PlaceholderPage title="Settings" />} />
           <Route path="/leagues" element={<PlaceholderPage title="Manage Leagues" />} />

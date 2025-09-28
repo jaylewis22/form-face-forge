@@ -22,7 +22,7 @@ export default function Dashboard() {
         {/* Header */}
         <div>
           <h1 className="text-3xl font-bold mb-2">Dashboard</h1>
-          <p className="text-muted-foreground">Welcome to Team Manager Pro</p>
+          <p className="text-muted-foreground">Welcome to the compdata Editor</p>
         </div>
 
         {/* Stats Overview */}

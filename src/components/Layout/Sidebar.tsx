@@ -16,7 +16,7 @@ const menuItems = [
   { icon: Layers3, label: "Roster", path: "/roster" },
   { icon: Users, label: "Players", path: "/players" },
   { icon: Shield, label: "Teams", path: "/teams" },
-  { icon: Trophy, label: "Trophies", path: "/trophies" },
+  { icon: Trophy, label: "Leagues", path: "/trophies" },
   { icon: Calendar, label: "Schedule", path: "/schedule" },
   { icon: Settings, label: "Settings", path: "/settings" },
 ];
