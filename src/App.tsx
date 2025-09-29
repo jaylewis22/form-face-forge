@@ -10,6 +10,7 @@ import Teams from "./pages/Teams";
 import PlaceholderPage from "./pages/PlaceholderPage";
 import NotFound from "./pages/NotFound";
 import DatabasePage from "./pages/Database";
+import Settings from "./pages/Settings";
 
 const queryClient = new QueryClient();
 
@@ -26,7 +27,7 @@ const App = () => (
           <Route path="/teams" element={<Teams />} />
           <Route path="/trophies" element={<PlaceholderPage title="Leagues" />} />
           <Route path="/schedule" element={<PlaceholderPage title="Schedule Editor" />} />
-          <Route path="/settings" element={<PlaceholderPage title="Settings" />} />
+          <Route path="/settings" element={<Settings />} />
           <Route path="/leagues" element={<PlaceholderPage title="Manage Leagues" />} />
           <Route path="/competitions" element={<PlaceholderPage title="Arrange Competitions" />} />
           <Route path="/kits" element={<PlaceholderPage title="Edit Kits" />} />
