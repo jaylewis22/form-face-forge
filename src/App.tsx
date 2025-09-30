@@ -12,6 +12,7 @@ import NotFound from "./pages/NotFound";
 import DatabasePage from "./pages/Database";
 import Settings from "./pages/Settings";
 import CreationHub from "./pages/CreationHub";
+import ScheduleEditor from "./pages/ScheduleEditor";
 
 const queryClient = new QueryClient();
 
@@ -28,7 +29,7 @@ const App = () => (
           <Route path="/teams" element={<Teams />} />
           <Route path="/creation-hub" element={<CreationHub />} />
           <Route path="/trophies" element={<PlaceholderPage title="Leagues" />} />
-          <Route path="/schedule" element={<PlaceholderPage title="Schedule Editor" />} />
+          <Route path="/schedule" element={<ScheduleEditor />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/leagues" element={<PlaceholderPage title="Manage Leagues" />} />
           <Route path="/competitions" element={<PlaceholderPage title="Arrange Competitions" />} />
