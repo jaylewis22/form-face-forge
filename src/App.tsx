@@ -8,6 +8,7 @@ import Roster from "./pages/Roster";
 import Players from "./pages/Players";
 import Teams from "./pages/Teams";
 import PlaceholderPage from "./pages/PlaceholderPage";
+import Leagues from "./pages/Leagues";
 import NotFound from "./pages/NotFound";
 import DatabasePage from "./pages/Database";
 import Settings from "./pages/Settings";
@@ -31,7 +32,7 @@ const App = () => (
           <Route path="/trophies" element={<PlaceholderPage title="Leagues" />} />
           <Route path="/schedule" element={<ScheduleEditor />} />
           <Route path="/settings" element={<Settings />} />
-          <Route path="/leagues" element={<PlaceholderPage title="Manage Leagues" />} />
+          <Route path="/leagues" element={<Leagues />} />
           <Route path="/competitions" element={<PlaceholderPage title="Arrange Competitions" />} />
           <Route path="/kits" element={<PlaceholderPage title="Edit Kits" />} />
           <Route path="/database" element={<DatabasePage />} />
