@@ -7,7 +7,9 @@ import {
   Calendar, 
   Settings, 
   Layers3,
-  Shield
+  Shield,
+  Plus,
+  Database
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -16,8 +18,10 @@ const menuItems = [
   { icon: Layers3, label: "Roster", path: "/roster" },
   { icon: Users, label: "Players", path: "/players" },
   { icon: Shield, label: "Teams", path: "/teams" },
+  { icon: Plus, label: "Creation Hub", path: "/creation-hub" },
   { icon: Trophy, label: "Leagues", path: "/trophies" },
   { icon: Calendar, label: "Schedule", path: "/schedule" },
+  { icon: Database, label: "Database", path: "/database" },
   { icon: Settings, label: "Settings", path: "/settings" },
 ];
 

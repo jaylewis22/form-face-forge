@@ -11,6 +11,7 @@ import PlaceholderPage from "./pages/PlaceholderPage";
 import NotFound from "./pages/NotFound";
 import DatabasePage from "./pages/Database";
 import Settings from "./pages/Settings";
+import CreationHub from "./pages/CreationHub";
 
 const queryClient = new QueryClient();
 
@@ -25,6 +26,7 @@ const App = () => (
           <Route path="/roster" element={<Roster />} />
           <Route path="/players" element={<Players />} />
           <Route path="/teams" element={<Teams />} />
+          <Route path="/creation-hub" element={<CreationHub />} />
           <Route path="/trophies" element={<PlaceholderPage title="Leagues" />} />
           <Route path="/schedule" element={<PlaceholderPage title="Schedule Editor" />} />
           <Route path="/settings" element={<Settings />} />
