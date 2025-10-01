@@ -9,6 +9,7 @@ import Players from "./pages/Players";
 import Teams from "./pages/Teams";
 import Leagues from "./pages/Leagues";
 import PlaceholderPage from "./pages/PlaceholderPage";
+import Competitions from "./pages/Competitions";
 import NotFound from "./pages/NotFound";
 import DatabasePage from "./pages/Database";
 import Settings from "./pages/Settings";
@@ -33,7 +34,7 @@ const App = () => (
           <Route path="/schedule" element={<ScheduleEditor />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/leagues" element={<Leagues />} />
-          <Route path="/competitions" element={<PlaceholderPage title="Arrange Competitions" />} />
+          <Route path="/competitions" element={<Competitions />} />
           <Route path="/kits" element={<PlaceholderPage title="Edit Kits" />} />
           <Route path="/database" element={<DatabasePage />} />
           <Route path="/profile" element={<PlaceholderPage title="Profile" />} />
