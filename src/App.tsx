@@ -15,6 +15,7 @@ import DatabasePage from "./pages/Database";
 import Settings from "./pages/Settings";
 import CreationHub from "./pages/CreationHub";
 import ScheduleEditor from "./pages/ScheduleEditor";
+import Kits from "./pages/Kits";
 
 const queryClient = new QueryClient();
 
@@ -35,7 +36,7 @@ const App = () => (
           <Route path="/settings" element={<Settings />} />
           <Route path="/leagues" element={<Leagues />} />
           <Route path="/competitions" element={<Competitions />} />
-          <Route path="/kits" element={<PlaceholderPage title="Edit Kits" />} />
+          <Route path="/kits" element={<Kits />} />
           <Route path="/database" element={<DatabasePage />} />
           <Route path="/profile" element={<PlaceholderPage title="Profile" />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
