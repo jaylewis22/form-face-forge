@@ -7,8 +7,8 @@ import Dashboard from "./pages/Dashboard";
 import Roster from "./pages/Roster";
 import Players from "./pages/Players";
 import Teams from "./pages/Teams";
-import PlaceholderPage from "./pages/PlaceholderPage";
 import Leagues from "./pages/Leagues";
+import PlaceholderPage from "./pages/PlaceholderPage";
 import NotFound from "./pages/NotFound";
 import DatabasePage from "./pages/Database";
 import Settings from "./pages/Settings";
@@ -29,7 +29,7 @@ const App = () => (
           <Route path="/players" element={<Players />} />
           <Route path="/teams" element={<Teams />} />
           <Route path="/creation-hub" element={<CreationHub />} />
-          <Route path="/trophies" element={<PlaceholderPage title="Leagues" />} />
+          <Route path="/trophies" element={<Leagues />} />
           <Route path="/schedule" element={<ScheduleEditor />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/leagues" element={<Leagues />} />
