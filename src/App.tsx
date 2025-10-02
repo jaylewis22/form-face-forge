@@ -16,6 +16,7 @@ import Settings from "./pages/Settings";
 import CreationHub from "./pages/CreationHub";
 import ScheduleEditor from "./pages/ScheduleEditor";
 import Kits from "./pages/Kits";
+import Profile from "./pages/Profile";
 
 const queryClient = new QueryClient();
 
@@ -38,7 +39,7 @@ const App = () => (
           <Route path="/competitions" element={<Competitions />} />
           <Route path="/kits" element={<Kits />} />
           <Route path="/database" element={<DatabasePage />} />
-          <Route path="/profile" element={<PlaceholderPage title="Profile" />} />
+          <Route path="/profile" element={<Profile />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
