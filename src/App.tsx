@@ -4,7 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Dashboard from "./pages/Dashboard";
-import Roster from "./pages/Roster";
+
 import Players from "./pages/Players";
 import Teams from "./pages/Teams";
 import Leagues from "./pages/Leagues";
@@ -28,7 +28,7 @@ const App = () => (
         <Sonner />
         <Routes>
           <Route path="/" element={<Dashboard />} />
-          <Route path="/roster" element={<Roster />} />
+          
           <Route path="/players" element={<Players />} />
           <Route path="/teams" element={<Teams />} />
           <Route path="/creation-hub" element={<CreationHub />} />

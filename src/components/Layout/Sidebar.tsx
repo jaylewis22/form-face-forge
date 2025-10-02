@@ -6,7 +6,7 @@ import {
   Trophy, 
   Calendar, 
   Settings, 
-  Layers3,
+  
   Shield,
   Plus,
   Database
@@ -15,7 +15,6 @@ import { cn } from "@/lib/utils";
 
 const menuItems = [
   { icon: Home, label: "Dashboard", path: "/" },
-  { icon: Layers3, label: "Roster", path: "/roster" },
   { icon: Users, label: "Players", path: "/players" },
   { icon: Shield, label: "Teams", path: "/teams" },
   { icon: Plus, label: "Creation Hub", path: "/creation-hub" },
