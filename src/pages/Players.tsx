@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/Layout/AppLayout";
 import { PlayerCard } from "@/components/Player/PlayerCard";
 import { PlayerList } from "@/components/Player/PlayerList";
@@ -65,6 +66,7 @@ const mockPlayers = [
 ];
 
 export default function Players() {
+  const navigate = useNavigate();
   const [selectedPlayer, setSelectedPlayer] = useState(mockPlayers[0]);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -100,10 +102,7 @@ export default function Players() {
               <h2 className="text-lg font-semibold mb-4">Squad</h2>
               <PlayerList
                 players={filteredPlayers}
-                onPlayerClick={(player) => {
-                  const fullPlayer = mockPlayers.find(p => p.id === player.id);
-                  if (fullPlayer) setSelectedPlayer(fullPlayer);
-                }}
+                onPlayerClick={(player) => navigate(`/players/${player.id}`)}
               />
             </div>
           </div>

@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Dashboard from "./pages/Dashboard";
 
 import Players from "./pages/Players";
+import PlayerDetail from "./pages/PlayerDetail";
 import Teams from "./pages/Teams";
 import Leagues from "./pages/Leagues";
 import PlaceholderPage from "./pages/PlaceholderPage";
@@ -30,6 +31,7 @@ const App = () => (
           <Route path="/" element={<Dashboard />} />
           
           <Route path="/players" element={<Players />} />
+          <Route path="/players/:id" element={<PlayerDetail />} />
           <Route path="/teams" element={<Teams />} />
           <Route path="/creation-hub" element={<CreationHub />} />
           <Route path="/trophies" element={<Leagues />} />

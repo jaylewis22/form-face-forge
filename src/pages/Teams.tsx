@@ -3,6 +3,7 @@ import { TeamOverview } from "@/components/Team/TeamOverview";
 import { TeamComparison } from "@/components/Team/TeamComparison";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PlayerList } from "@/components/Player/PlayerList";
+import { useNavigate } from "react-router-dom";
 
 const mockTeam = {
   name: "Manchester United",
@@ -25,6 +26,8 @@ const mockPlayers = [
 ];
 
 export default function Teams() {
+  const navigate = useNavigate();
+
   return (
     <AppLayout>
       <div className="space-y-6 animate-fade-in">
@@ -46,7 +49,7 @@ export default function Teams() {
               <p className="text-muted-foreground mb-6">
                 View and manage your complete team roster
               </p>
-              <PlayerList players={mockPlayers} />
+              <PlayerList players={mockPlayers} onPlayerClick={(player) => navigate(`/players/${player.id}`)} />
             </div>
           </TabsContent>
 
@@ -56,7 +59,7 @@ export default function Teams() {
               <p className="text-muted-foreground mb-6">
                 Detailed player statistics and management options
               </p>
-              <PlayerList players={mockPlayers} />
+              <PlayerList players={mockPlayers} onPlayerClick={(player) => navigate(`/players/${player.id}`)} />
             </div>
           </TabsContent>
 
