@@ -1,5 +1,6 @@
 import { AppLayout } from "@/components/Layout/AppLayout";
 import { TeamOverview } from "@/components/Team/TeamOverview";
+import { TeamComparison } from "@/components/Team/TeamComparison";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PlayerList } from "@/components/Player/PlayerList";
 
@@ -60,15 +61,7 @@ export default function Teams() {
           </TabsContent>
 
           <TabsContent value="teams" className="space-y-6">
-            <div className="glass rounded-xl p-6">
-              <h2 className="text-2xl font-bold mb-4">Team Comparison</h2>
-              <p className="text-muted-foreground">
-                Compare your team with other teams in the league
-              </p>
-              <div className="mt-6 text-center text-muted-foreground">
-                Team comparison feature coming soon...
-              </div>
-            </div>
+            <TeamComparison />
           </TabsContent>
         </Tabs>
       </div>
