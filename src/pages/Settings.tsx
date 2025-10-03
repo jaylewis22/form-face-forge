@@ -40,7 +40,6 @@ export default function Settings() {
   const { toast } = useToast();
   const [autoSave, setAutoSave] = useState(true);
   const [notifications, setNotifications] = useState(true);
-  const [emailNotifications, setEmailNotifications] = useState(false);
   const [darkMode, setDarkMode] = useState(true);
   const [autoBackup, setAutoBackup] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
@@ -79,7 +78,6 @@ export default function Settings() {
             <TabsTrigger value="profile">Profile</TabsTrigger>
             <TabsTrigger value="appearance">Appearance</TabsTrigger>
             <TabsTrigger value="notifications">Notifications</TabsTrigger>
-            <TabsTrigger value="data">Data & Privacy</TabsTrigger>
             <TabsTrigger value="advanced">Advanced</TabsTrigger>
           </TabsList>
 
@@ -400,19 +398,6 @@ export default function Settings() {
                     />
                   </div>
                   <Separator />
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label>Email Notifications</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Receive updates via email
-                      </p>
-                    </div>
-                    <Switch
-                      checked={emailNotifications}
-                      onCheckedChange={setEmailNotifications}
-                    />
-                  </div>
-                  <Separator />
                   <div className="space-y-3">
                     <Label>Notify me about:</Label>
                     <div className="space-y-3">
@@ -443,101 +428,6 @@ export default function Settings() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="data" className="space-y-6">
-            <Card className="bg-card/50 border-border/50">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Shield className="w-5 h-5" />
-                  Data & Privacy
-                </CardTitle>
-                <CardDescription>
-                  Manage your data and privacy settings
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label>Data Collection</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Allow anonymous usage statistics
-                      </p>
-                    </div>
-                    <Switch defaultChecked />
-                  </div>
-                  <Separator />
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label>Share Performance Data</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Help improve the app by sharing performance metrics
-                      </p>
-                    </div>
-                    <Switch />
-                  </div>
-                  <Separator />
-                  <div className="space-y-3">
-                    <Label>Data Export</Label>
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm">
-                        Export My Data
-                      </Button>
-                      <Button variant="outline" size="sm">
-                        Request Data Deletion
-                      </Button>
-                    </div>
-                  </div>
-                  <Separator />
-                  <div className="space-y-3">
-                    <Label>Connected Services</Label>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between p-3 rounded-lg border border-border/50">
-                        <div className="flex items-center gap-3">
-                          <Database className="w-4 h-4 text-muted-foreground" />
-                          <div>
-                            <p className="text-sm font-medium">Cloud Sync</p>
-                            <p className="text-xs text-muted-foreground">Syncing enabled</p>
-                          </div>
-                        </div>
-                        <Button variant="ghost" size="sm">
-                          Disconnect
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-card/50 border-border/50">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Key className="w-5 h-5" />
-                  Security
-                </CardTitle>
-                <CardDescription>
-                  Manage your security preferences
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-3">
-                  <Button variant="outline" className="w-full justify-between">
-                    Change Password
-                    <ChevronRight className="w-4 h-4" />
-                  </Button>
-                  <Button variant="outline" className="w-full justify-between">
-                    Two-Factor Authentication
-                    <Badge variant="secondary">Off</Badge>
-                  </Button>
-                  <Button variant="outline" className="w-full justify-between">
-                    Active Sessions
-                    <Badge>3 devices</Badge>
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
           <TabsContent value="advanced" className="space-y-6">
             <Card className="bg-card/50 border-border/50">
               <CardHeader>
@@ -551,16 +441,6 @@ export default function Settings() {
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label>Developer Mode</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Enable advanced developer features
-                      </p>
-                    </div>
-                    <Switch />
-                  </div>
-                  <Separator />
                   <div className="flex items-center justify-between">
                     <div className="space-y-0.5">
                       <Label>Debug Logging</Label>
