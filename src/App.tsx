@@ -18,6 +18,7 @@ import CreationHub from "./pages/CreationHub";
 import ScheduleEditor from "./pages/ScheduleEditor";
 import Kits from "./pages/Kits";
 import Profile from "./pages/Profile";
+import FET from "./pages/FET";
 
 const queryClient = new QueryClient();
 
@@ -42,6 +43,7 @@ const App = () => (
           <Route path="/kits" element={<Kits />} />
           <Route path="/database" element={<DatabasePage />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/fet" element={<FET />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

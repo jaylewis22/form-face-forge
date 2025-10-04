@@ -9,7 +9,8 @@ import {
   
   Shield,
   Plus,
-  Database
+  Database,
+  FileCheck
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -21,6 +22,7 @@ const menuItems = [
   { icon: Trophy, label: "Leagues", path: "/trophies" },
   { icon: Calendar, label: "Schedule", path: "/schedule" },
   { icon: Database, label: "Database", path: "/database" },
+  { icon: FileCheck, label: "FET", path: "/fet" },
   { icon: Settings, label: "Settings", path: "/settings" },
 ];
 
