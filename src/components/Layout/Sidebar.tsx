@@ -30,7 +30,7 @@ export function Sidebar() {
   const location = useLocation();
 
   return (
-    <aside className="fixed left-0 top-0 h-full w-20 bg-sidebar-background border-r border-sidebar-border flex flex-col items-center py-6 z-50">
+    <aside className="fixed left-0 top-0 h-full w-16 sm:w-20 bg-sidebar-background border-r border-sidebar-border flex flex-col items-center py-4 sm:py-6 z-50">
       <div className="mb-8">
         <Link to="/" className="flex items-center justify-center">
           <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center glow-sm">

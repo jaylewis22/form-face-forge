@@ -103,8 +103,8 @@ export function Header() {
   };
 
   return (
-    <header className="fixed top-0 left-20 right-0 h-16 bg-background/80 backdrop-blur-md border-b border-border flex items-center justify-between px-6 z-40">
-      <div className="flex-1 max-w-md">
+    <header className="fixed top-0 left-20 right-0 h-16 bg-background/80 backdrop-blur-md border-b border-border flex items-center justify-between px-4 md:px-6 lg:px-8 z-40">
+      <div className="flex-1 max-w-md hidden sm:block">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input 
@@ -115,7 +115,7 @@ export function Header() {
         </div>
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2 md:gap-4">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="relative">
