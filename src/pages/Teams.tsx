@@ -55,10 +55,18 @@ export default function Teams() {
 
           <TabsContent value="players" className="space-y-6">
             <div className="glass rounded-xl p-6">
-              <h2 className="text-2xl font-bold mb-4">Player Management</h2>
-              <p className="text-muted-foreground mb-6">
-                Detailed player statistics and management options
-              </p>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-2xl font-bold">Player Management</h2>
+                  <p className="text-muted-foreground mt-1">
+                    Detailed player statistics and management options
+                  </p>
+                </div>
+                <div className="text-right">
+                  <div className="text-3xl font-bold text-primary">{mockPlayers.length}</div>
+                  <p className="text-sm text-muted-foreground">Total Players</p>
+                </div>
+              </div>
               <PlayerList players={mockPlayers} onPlayerClick={(player) => navigate(`/players/${player.id}`)} />
             </div>
           </TabsContent>
