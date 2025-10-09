@@ -266,6 +266,18 @@ export default function PlayerDetail() {
     }));
   };
 
+  const handleAttributeChange = (category: 'physical' | 'technical' | 'mental', index: number, value: number) => {
+    setEditedPlayer((prev) => ({
+      ...prev,
+      attributes: {
+        ...prev.attributes,
+        [category]: prev.attributes[category].map((attr: any, i: number) => 
+          i === index ? { ...attr, value } : attr
+        ),
+      },
+    }));
+  };
+
   const handleShare = () => {
     toast({
       title: "Share Player",
@@ -619,6 +631,72 @@ export default function PlayerDetail() {
                       placeholder="e.g., June 2025"
                     />
                   </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Physical Attributes */}
+              <div className="space-y-4">
+                <h3 className="font-semibold text-sm">Physical Attributes</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  {editedPlayer.attributes.physical.map((attr: any, index: number) => (
+                    <div key={attr.name} className="space-y-2">
+                      <Label htmlFor={`physical-${index}`}>{attr.name}</Label>
+                      <Input
+                        id={`physical-${index}`}
+                        type="number"
+                        value={attr.value}
+                        onChange={(e) => handleAttributeChange('physical', index, parseInt(e.target.value))}
+                        min="0"
+                        max="99"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Technical Attributes */}
+              <div className="space-y-4">
+                <h3 className="font-semibold text-sm">Technical Attributes</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  {editedPlayer.attributes.technical.map((attr: any, index: number) => (
+                    <div key={attr.name} className="space-y-2">
+                      <Label htmlFor={`technical-${index}`}>{attr.name}</Label>
+                      <Input
+                        id={`technical-${index}`}
+                        type="number"
+                        value={attr.value}
+                        onChange={(e) => handleAttributeChange('technical', index, parseInt(e.target.value))}
+                        min="0"
+                        max="99"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Mental Attributes */}
+              <div className="space-y-4">
+                <h3 className="font-semibold text-sm">Mental Attributes</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  {editedPlayer.attributes.mental.map((attr: any, index: number) => (
+                    <div key={attr.name} className="space-y-2">
+                      <Label htmlFor={`mental-${index}`}>{attr.name}</Label>
+                      <Input
+                        id={`mental-${index}`}
+                        type="number"
+                        value={attr.value}
+                        onChange={(e) => handleAttributeChange('mental', index, parseInt(e.target.value))}
+                        min="0"
+                        max="99"
+                      />
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
