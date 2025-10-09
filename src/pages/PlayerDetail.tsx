@@ -1,4 +1,5 @@
 import { useParams, useNavigate } from "react-router-dom";
+import { useState } from "react";
 import { AppLayout } from "@/components/Layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,6 +8,17 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   ArrowLeft,
   Edit,
@@ -229,14 +241,29 @@ export default function PlayerDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editedPlayer, setEditedPlayer] = useState(mockPlayersData[id || "1"] || mockPlayersData["1"]);
 
-  const player = mockPlayersData[id || "1"] || mockPlayersData["1"];
+  const player = editedPlayer;
 
   const handleEdit = () => {
+    setIsEditDialogOpen(true);
+  };
+
+  const handleSaveEdit = () => {
+    // In a real app, this would save to the database
     toast({
-      title: "Edit Player",
-      description: "Player editing feature coming soon!",
+      title: "Player Updated",
+      description: "Player information has been updated successfully!",
     });
+    setIsEditDialogOpen(false);
+  };
+
+  const handleInputChange = (field: string, value: any) => {
+    setEditedPlayer((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
   };
 
   const handleShare = () => {
@@ -435,6 +462,175 @@ export default function PlayerDetail() {
             </Card>
           </div>
         </div>
+
+        {/* Edit Dialog */}
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Edit Player</DialogTitle>
+              <DialogDescription>
+                Update player information and attributes
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="grid gap-6 py-4">
+              {/* Basic Information */}
+              <div className="space-y-4">
+                <h3 className="font-semibold text-sm">Basic Information</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Name</Label>
+                    <Input
+                      id="name"
+                      value={editedPlayer.name}
+                      onChange={(e) => handleInputChange("name", e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="position">Position</Label>
+                    <Select
+                      value={editedPlayer.position}
+                      onValueChange={(value) => handleInputChange("position", value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Goalkeeper">Goalkeeper</SelectItem>
+                        <SelectItem value="Defender">Defender</SelectItem>
+                        <SelectItem value="Midfielder">Midfielder</SelectItem>
+                        <SelectItem value="Forward">Forward</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="number">Number</Label>
+                    <Input
+                      id="number"
+                      type="number"
+                      value={editedPlayer.number}
+                      onChange={(e) => handleInputChange("number", parseInt(e.target.value))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="rating">Rating</Label>
+                    <Input
+                      id="rating"
+                      type="number"
+                      value={editedPlayer.rating}
+                      onChange={(e) => handleInputChange("rating", parseInt(e.target.value))}
+                      min="0"
+                      max="99"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="age">Age</Label>
+                    <Input
+                      id="age"
+                      type="number"
+                      value={editedPlayer.age}
+                      onChange={(e) => handleInputChange("age", parseInt(e.target.value))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="nationality">Nationality</Label>
+                    <Input
+                      id="nationality"
+                      value={editedPlayer.nationality}
+                      onChange={(e) => handleInputChange("nationality", e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="height">Height</Label>
+                    <Input
+                      id="height"
+                      value={editedPlayer.height}
+                      onChange={(e) => handleInputChange("height", e.target.value)}
+                      placeholder="e.g., 192 cm"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="weight">Weight</Label>
+                    <Input
+                      id="weight"
+                      value={editedPlayer.weight}
+                      onChange={(e) => handleInputChange("weight", e.target.value)}
+                      placeholder="e.g., 82 kg"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="foot">Preferred Foot</Label>
+                    <Select
+                      value={editedPlayer.foot}
+                      onValueChange={(value) => handleInputChange("foot", value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Left">Left</SelectItem>
+                        <SelectItem value="Right">Right</SelectItem>
+                        <SelectItem value="Both">Both</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Contract Information */}
+              <div className="space-y-4">
+                <h3 className="font-semibold text-sm">Contract Information</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="value">Market Value</Label>
+                    <Input
+                      id="value"
+                      value={editedPlayer.value}
+                      onChange={(e) => handleInputChange("value", e.target.value)}
+                      placeholder="e.g., €18M"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="wage">Wage</Label>
+                    <Input
+                      id="wage"
+                      value={editedPlayer.wage}
+                      onChange={(e) => handleInputChange("wage", e.target.value)}
+                      placeholder="e.g., €375K/week"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="joinDate">Join Date</Label>
+                    <Input
+                      id="joinDate"
+                      value={editedPlayer.joinDate}
+                      onChange={(e) => handleInputChange("joinDate", e.target.value)}
+                      placeholder="e.g., July 2011"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="contract">Contract Until</Label>
+                    <Input
+                      id="contract"
+                      value={editedPlayer.contract}
+                      onChange={(e) => handleInputChange("contract", e.target.value)}
+                      placeholder="e.g., June 2025"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleSaveEdit}>Save Changes</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </AppLayout>
   );
