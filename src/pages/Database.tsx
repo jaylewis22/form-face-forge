@@ -7,6 +7,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { 
   Database, 
   Download, 
   Upload, 
@@ -22,13 +29,18 @@ import {
   FileUp,
   Settings
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function DatabasePage() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [selectedBackup, setSelectedBackup] = useState("");
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importType, setImportType] = useState("merge");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleExport = () => {
     setIsLoading(true);
@@ -42,10 +54,74 @@ export default function DatabasePage() {
   };
 
   const handleImport = () => {
-    toast({
-      title: "Import Database",
-      description: "Select a file to import your database backup.",
-    });
+    setImportDialogOpen(true);
+  };
+
+  const handleFileSelect = (file: File) => {
+    const validExtensions = ['.json', '.csv', '.sql', '.xml'];
+    const fileExtension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+    
+    if (!validExtensions.includes(fileExtension)) {
+      toast({
+        title: "Invalid File Type",
+        description: "Please select a JSON, CSV, SQL, or XML file.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (file.size > 100 * 1024 * 1024) {
+      toast({
+        title: "File Too Large",
+        description: "Maximum file size is 100MB.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setSelectedFile(file);
+  };
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    
+    const file = e.dataTransfer.files[0];
+    if (file) {
+      handleFileSelect(file);
+    }
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  }, []);
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleFileSelect(file);
+    }
+  };
+
+  const handleImportSubmit = () => {
+    if (!selectedFile) return;
+    
+    setIsLoading(true);
+    setTimeout(() => {
+      setIsLoading(false);
+      setImportDialogOpen(false);
+      setSelectedFile(null);
+      toast({
+        title: "Import Complete",
+        description: `Successfully imported ${selectedFile.name}`,
+      });
+    }, 2000);
   };
 
   const handleBackup = () => {
@@ -507,6 +583,110 @@ export default function DatabasePage() {
             </div>
           </TabsContent>
         </Tabs>
+
+        {/* Import Data Dialog */}
+        <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Database className="w-5 h-5" />
+                Import Data
+              </DialogTitle>
+              <DialogDescription>
+                Upload database files to import data
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Import Type</Label>
+                <Select value={importType} onValueChange={setImportType}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="merge">Merge with existing</SelectItem>
+                    <SelectItem value="replace">Replace all data</SelectItem>
+                    <SelectItem value="append">Append only</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div 
+                className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer ${
+                  isDragging 
+                    ? 'border-primary bg-primary/10' 
+                    : selectedFile 
+                      ? 'border-primary/50 bg-primary/5' 
+                      : 'border-border/50 hover:border-primary/30'
+                }`}
+                onDrop={handleDrop}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".json,.csv,.sql,.xml"
+                  onChange={handleFileInputChange}
+                  className="hidden"
+                />
+                {selectedFile ? (
+                  <>
+                    <CheckCircle className="w-8 h-8 mx-auto mb-2 text-primary" />
+                    <p className="text-sm font-medium">{selectedFile.name}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                    </p>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="mt-2"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedFile(null);
+                      }}
+                    >
+                      Change File
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground mb-2">
+                      Drag and drop your file here, or click to browse
+                    </p>
+                    <Button variant="outline" size="sm">
+                      Select File
+                    </Button>
+                  </>
+                )}
+              </div>
+              
+              <p className="text-xs text-muted-foreground">
+                Supported formats: JSON, CSV, SQL, XML (Max 100MB)
+              </p>
+              
+              <div className="flex gap-2 justify-end">
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setImportDialogOpen(false);
+                    setSelectedFile(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleImportSubmit}
+                  disabled={!selectedFile || isLoading}
+                >
+                  {isLoading ? "Importing..." : "Import Data"}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </AppLayout>
   );
