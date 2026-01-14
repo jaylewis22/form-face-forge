@@ -14,7 +14,354 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      competitions: {
+        Row: {
+          competition_type: string | null
+          country_code: string | null
+          created_at: string
+          id: number
+          name: string
+          short_name: string | null
+          updated_at: string
+        }
+        Insert: {
+          competition_type?: string | null
+          country_code?: string | null
+          created_at?: string
+          id?: number
+          name: string
+          short_name?: string | null
+          updated_at?: string
+        }
+        Update: {
+          competition_type?: string | null
+          country_code?: string | null
+          created_at?: string
+          id?: number
+          name?: string
+          short_name?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      kits: {
+        Row: {
+          created_at: string
+          id: number
+          kit_type: string
+          pattern: string | null
+          primary_color: string | null
+          secondary_color: string | null
+          team_id: number | null
+          third_color: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: number
+          kit_type: string
+          pattern?: string | null
+          primary_color?: string | null
+          secondary_color?: string | null
+          team_id?: number | null
+          third_color?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: number
+          kit_type?: string
+          pattern?: string | null
+          primary_color?: string | null
+          secondary_color?: string | null
+          team_id?: number | null
+          third_color?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kits_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      leagues: {
+        Row: {
+          country_code: string | null
+          created_at: string
+          id: number
+          level: number | null
+          name: string
+          short_name: string | null
+          updated_at: string
+        }
+        Insert: {
+          country_code?: string | null
+          created_at?: string
+          id?: number
+          level?: number | null
+          name: string
+          short_name?: string | null
+          updated_at?: string
+        }
+        Update: {
+          country_code?: string | null
+          created_at?: string
+          id?: number
+          level?: number | null
+          name?: string
+          short_name?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      players: {
+        Row: {
+          acceleration: number | null
+          age: number | null
+          aggression: number | null
+          agility: number | null
+          balance: number | null
+          ball_control: number | null
+          composure: number | null
+          contract_end: string | null
+          created_at: string
+          crossing: number | null
+          curve: number | null
+          def_awareness: number | null
+          defending: number | null
+          dribbling: number | null
+          finishing: number | null
+          free_kick_accuracy: number | null
+          gk_diving: number | null
+          gk_handling: number | null
+          gk_kicking: number | null
+          gk_positioning: number | null
+          gk_reflexes: number | null
+          heading_accuracy: number | null
+          height: number | null
+          id: number
+          interceptions: number | null
+          jersey_number: number | null
+          jumping: number | null
+          long_passing: number | null
+          long_shots: number | null
+          name: string
+          nationality: string | null
+          nationality_code: string | null
+          overall_rating: number | null
+          pace: number | null
+          passing: number | null
+          penalties: number | null
+          physical: number | null
+          position: string | null
+          positioning: number | null
+          potential_rating: number | null
+          preferred_foot: string | null
+          reactions: number | null
+          secondary_position: string | null
+          shooting: number | null
+          short_name: string | null
+          short_passing: number | null
+          shot_power: number | null
+          skill_moves: number | null
+          sliding_tackle: number | null
+          sprint_speed: number | null
+          stamina: number | null
+          standing_tackle: number | null
+          strength: number | null
+          team_id: number | null
+          updated_at: string
+          vision: number | null
+          volleys: number | null
+          wage: number | null
+          weak_foot: number | null
+          weight: number | null
+        }
+        Insert: {
+          acceleration?: number | null
+          age?: number | null
+          aggression?: number | null
+          agility?: number | null
+          balance?: number | null
+          ball_control?: number | null
+          composure?: number | null
+          contract_end?: string | null
+          created_at?: string
+          crossing?: number | null
+          curve?: number | null
+          def_awareness?: number | null
+          defending?: number | null
+          dribbling?: number | null
+          finishing?: number | null
+          free_kick_accuracy?: number | null
+          gk_diving?: number | null
+          gk_handling?: number | null
+          gk_kicking?: number | null
+          gk_positioning?: number | null
+          gk_reflexes?: number | null
+          heading_accuracy?: number | null
+          height?: number | null
+          id?: number
+          interceptions?: number | null
+          jersey_number?: number | null
+          jumping?: number | null
+          long_passing?: number | null
+          long_shots?: number | null
+          name: string
+          nationality?: string | null
+          nationality_code?: string | null
+          overall_rating?: number | null
+          pace?: number | null
+          passing?: number | null
+          penalties?: number | null
+          physical?: number | null
+          position?: string | null
+          positioning?: number | null
+          potential_rating?: number | null
+          preferred_foot?: string | null
+          reactions?: number | null
+          secondary_position?: string | null
+          shooting?: number | null
+          short_name?: string | null
+          short_passing?: number | null
+          shot_power?: number | null
+          skill_moves?: number | null
+          sliding_tackle?: number | null
+          sprint_speed?: number | null
+          stamina?: number | null
+          standing_tackle?: number | null
+          strength?: number | null
+          team_id?: number | null
+          updated_at?: string
+          vision?: number | null
+          volleys?: number | null
+          wage?: number | null
+          weak_foot?: number | null
+          weight?: number | null
+        }
+        Update: {
+          acceleration?: number | null
+          age?: number | null
+          aggression?: number | null
+          agility?: number | null
+          balance?: number | null
+          ball_control?: number | null
+          composure?: number | null
+          contract_end?: string | null
+          created_at?: string
+          crossing?: number | null
+          curve?: number | null
+          def_awareness?: number | null
+          defending?: number | null
+          dribbling?: number | null
+          finishing?: number | null
+          free_kick_accuracy?: number | null
+          gk_diving?: number | null
+          gk_handling?: number | null
+          gk_kicking?: number | null
+          gk_positioning?: number | null
+          gk_reflexes?: number | null
+          heading_accuracy?: number | null
+          height?: number | null
+          id?: number
+          interceptions?: number | null
+          jersey_number?: number | null
+          jumping?: number | null
+          long_passing?: number | null
+          long_shots?: number | null
+          name?: string
+          nationality?: string | null
+          nationality_code?: string | null
+          overall_rating?: number | null
+          pace?: number | null
+          passing?: number | null
+          penalties?: number | null
+          physical?: number | null
+          position?: string | null
+          positioning?: number | null
+          potential_rating?: number | null
+          preferred_foot?: string | null
+          reactions?: number | null
+          secondary_position?: string | null
+          shooting?: number | null
+          short_name?: string | null
+          short_passing?: number | null
+          shot_power?: number | null
+          skill_moves?: number | null
+          sliding_tackle?: number | null
+          sprint_speed?: number | null
+          stamina?: number | null
+          standing_tackle?: number | null
+          strength?: number | null
+          team_id?: number | null
+          updated_at?: string
+          vision?: number | null
+          volleys?: number | null
+          wage?: number | null
+          weak_foot?: number | null
+          weight?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "players_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      teams: {
+        Row: {
+          budget: number | null
+          country_code: string | null
+          created_at: string
+          id: number
+          league_id: number | null
+          name: string
+          overall_rating: number | null
+          short_name: string | null
+          stadium: string | null
+          updated_at: string
+        }
+        Insert: {
+          budget?: number | null
+          country_code?: string | null
+          created_at?: string
+          id?: number
+          league_id?: number | null
+          name: string
+          overall_rating?: number | null
+          short_name?: string | null
+          stadium?: string | null
+          updated_at?: string
+        }
+        Update: {
+          budget?: number | null
+          country_code?: string | null
+          created_at?: string
+          id?: number
+          league_id?: number | null
+          name?: string
+          overall_rating?: number | null
+          short_name?: string | null
+          stadium?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "teams_league_id_fkey"
+            columns: ["league_id"]
+            isOneToOne: false
+            referencedRelation: "leagues"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

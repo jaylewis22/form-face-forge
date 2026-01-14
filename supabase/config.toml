@@ -1,1 +1,4 @@
 project_id = "tgtezttjspmfvvftvjbi"
+
+[functions.import-database]
+verify_jwt = false
