@@ -27,10 +27,12 @@ import {
   Archive,
   FileDown,
   FileUp,
-  Settings
+  Settings,
+  Loader2
 } from "lucide-react";
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function DatabasePage() {
   const { toast } = useToast();
@@ -40,7 +42,41 @@ export default function DatabasePage() {
   const [importType, setImportType] = useState("merge");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [importProgress, setImportProgress] = useState(0);
+  const [dbStats, setDbStats] = useState({
+    players: 0,
+    teams: 0,
+    leagues: 0,
+    competitions: 0,
+    totalSize: 0,
+  });
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Fetch database stats on mount
+  useEffect(() => {
+    fetchDatabaseStats();
+  }, []);
+
+  const fetchDatabaseStats = async () => {
+    try {
+      const [playersResult, teamsResult, leaguesResult, competitionsResult] = await Promise.all([
+        supabase.from("players").select("id", { count: "exact", head: true }),
+        supabase.from("teams").select("id", { count: "exact", head: true }),
+        supabase.from("leagues").select("id", { count: "exact", head: true }),
+        supabase.from("competitions").select("id", { count: "exact", head: true }),
+      ]);
+
+      setDbStats({
+        players: playersResult.count || 0,
+        teams: teamsResult.count || 0,
+        leagues: leaguesResult.count || 0,
+        competitions: competitionsResult.count || 0,
+        totalSize: (playersResult.count || 0) + (teamsResult.count || 0) + (leaguesResult.count || 0) + (competitionsResult.count || 0),
+      });
+    } catch (error) {
+      console.error("Error fetching stats:", error);
+    }
+  };
 
   const handleExport = () => {
     setIsLoading(true);
@@ -58,13 +94,19 @@ export default function DatabasePage() {
   };
 
   const handleFileSelect = (file: File) => {
-    const validExtensions = ['.json', '.csv', '.sql', '.xml'];
-    const fileExtension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+    // Accept JSON for FET exports, plus binary files
+    const fileName = file.name.toLowerCase();
+    const validExtensions = ['.json', '.csv', '.sql', '.xml', '.bin'];
+    const hasExtension = fileName.includes('.');
+    const fileExtension = hasExtension ? fileName.substring(fileName.lastIndexOf('.')) : '';
     
-    if (!validExtensions.includes(fileExtension)) {
+    // Accept files without extensions (like FB chunks) or with valid extensions
+    const isValidExtension = !hasExtension || validExtensions.includes(fileExtension);
+    
+    if (!isValidExtension) {
       toast({
         title: "Invalid File Type",
-        description: "Please select a JSON, CSV, SQL, or XML file.",
+        description: "Please select a JSON, CSV, SQL, XML, or binary file.",
         variant: "destructive",
       });
       return;
@@ -109,19 +151,74 @@ export default function DatabasePage() {
     }
   };
 
-  const handleImportSubmit = () => {
+  const parseJsonFile = async (file: File): Promise<any> => {
+    const text = await file.text();
+    return JSON.parse(text);
+  };
+
+  const handleImportSubmit = async () => {
     if (!selectedFile) return;
     
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
+    setImportProgress(10);
+
+    try {
+      const fileName = selectedFile.name.toLowerCase();
+      
+      // Check if it's a JSON file (FET export format)
+      if (fileName.endsWith('.json')) {
+        setImportProgress(20);
+        const data = await parseJsonFile(selectedFile);
+        setImportProgress(40);
+        
+        // Call edge function to import
+        const { data: result, error } = await supabase.functions.invoke('import-database', {
+          body: { data, importType },
+        });
+        
+        setImportProgress(90);
+        
+        if (error) {
+          throw error;
+        }
+        
+        if (result?.success) {
+          toast({
+            title: "Import Complete",
+            description: `Successfully imported data: ${result.results.players.inserted} players, ${result.results.teams.inserted} teams, ${result.results.leagues.inserted} leagues`,
+          });
+          
+          // Refresh stats
+          await fetchDatabaseStats();
+        } else {
+          throw new Error(result?.error || "Import failed");
+        }
+      } else {
+        // For binary files, show a message about FET conversion
+        toast({
+          title: "Binary File Detected",
+          description: "Please use FIFA Editor Tool (FET) to export this file to JSON format first, then import the JSON file.",
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        setImportProgress(0);
+        return;
+      }
+      
+      setImportProgress(100);
       setImportDialogOpen(false);
       setSelectedFile(null);
+    } catch (error) {
+      console.error("Import error:", error);
       toast({
-        title: "Import Complete",
-        description: `Successfully imported ${selectedFile.name}`,
+        title: "Import Failed",
+        description: error instanceof Error ? error.message : "An error occurred during import",
+        variant: "destructive",
       });
-    }, 2000);
+    } finally {
+      setIsLoading(false);
+      setImportProgress(0);
+    }
   };
 
   const handleBackup = () => {
@@ -167,42 +264,41 @@ export default function DatabasePage() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Card className="bg-card/50 border-border/50">
             <CardHeader className="pb-2">
-              <CardDescription>Total Size</CardDescription>
-              <CardTitle className="text-2xl">248 MB</CardTitle>
+              <CardDescription>Players</CardDescription>
+              <CardTitle className="text-2xl">{dbStats.players.toLocaleString()}</CardTitle>
             </CardHeader>
             <CardContent>
-              <Progress value={25} className="h-2" />
-              <p className="text-xs text-muted-foreground mt-2">25% of 1GB limit</p>
+              <p className="text-xs text-muted-foreground">Total players in database</p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-card/50 border-border/50">
+            <CardHeader className="pb-2">
+              <CardDescription>Teams</CardDescription>
+              <CardTitle className="text-2xl">{dbStats.teams.toLocaleString()}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-xs text-muted-foreground">Total teams in database</p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-card/50 border-border/50">
+            <CardHeader className="pb-2">
+              <CardDescription>Leagues</CardDescription>
+              <CardTitle className="text-2xl">{dbStats.leagues.toLocaleString()}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-xs text-muted-foreground">Active leagues</p>
             </CardContent>
           </Card>
 
           <Card className="bg-card/50 border-border/50">
             <CardHeader className="pb-2">
               <CardDescription>Total Records</CardDescription>
-              <CardTitle className="text-2xl">12,456</CardTitle>
+              <CardTitle className="text-2xl text-primary">{dbStats.totalSize.toLocaleString()}</CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-xs text-muted-foreground">Across all tables</p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-card/50 border-border/50">
-            <CardHeader className="pb-2">
-              <CardDescription>Last Backup</CardDescription>
-              <CardTitle className="text-2xl">2 days ago</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-xs text-muted-foreground">Automatic backup enabled</p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-card/50 border-border/50">
-            <CardHeader className="pb-2">
-              <CardDescription>Database Health</CardDescription>
-              <CardTitle className="text-2xl text-primary">Excellent</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-xs text-muted-foreground">No issues detected</p>
             </CardContent>
           </Card>
         </div>
@@ -585,7 +681,12 @@ export default function DatabasePage() {
         </Tabs>
 
         {/* Import Data Dialog */}
-        <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+        <Dialog open={importDialogOpen} onOpenChange={(open) => {
+          if (!isLoading) {
+            setImportDialogOpen(open);
+            if (!open) setSelectedFile(null);
+          }
+        }}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
@@ -593,13 +694,13 @@ export default function DatabasePage() {
                 Import Data
               </DialogTitle>
               <DialogDescription>
-                Upload database files to import data
+                Upload FET export files (JSON) or binary database files
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label>Import Type</Label>
-                <Select value={importType} onValueChange={setImportType}>
+                <Select value={importType} onValueChange={setImportType} disabled={isLoading}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -612,7 +713,9 @@ export default function DatabasePage() {
               </div>
               
               <div 
-                className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer ${
+                className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+                  isLoading ? 'pointer-events-none opacity-50' : 'cursor-pointer'
+                } ${
                   isDragging 
                     ? 'border-primary bg-primary/10' 
                     : selectedFile 
@@ -622,12 +725,12 @@ export default function DatabasePage() {
                 onDrop={handleDrop}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => !isLoading && fileInputRef.current?.click()}
               >
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".json,.csv,.sql,.xml"
+                  accept=".json,.csv,.sql,.xml,.bin,*"
                   onChange={handleFileInputChange}
                   className="hidden"
                 />
@@ -638,17 +741,19 @@ export default function DatabasePage() {
                     <p className="text-xs text-muted-foreground mt-1">
                       {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
                     </p>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      className="mt-2"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedFile(null);
-                      }}
-                    >
-                      Change File
-                    </Button>
+                    {!isLoading && (
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="mt-2"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedFile(null);
+                        }}
+                      >
+                        Change File
+                      </Button>
+                    )}
                   </>
                 ) : (
                   <>
@@ -663,8 +768,24 @@ export default function DatabasePage() {
                 )}
               </div>
               
+              {isLoading && importProgress > 0 && (
+                <div className="space-y-2">
+                  <Progress value={importProgress} className="h-2" />
+                  <p className="text-xs text-muted-foreground text-center">
+                    Importing... {importProgress}%
+                  </p>
+                </div>
+              )}
+              
+              <Alert className="bg-muted/50">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription className="text-xs">
+                  <strong>FET Export:</strong> Use FIFA Editor Tool to export your database to JSON format for best results. Binary files (.bin, FB chunks) require FET conversion first.
+                </AlertDescription>
+              </Alert>
+              
               <p className="text-xs text-muted-foreground">
-                Supported formats: JSON, CSV, SQL, XML (Max 100MB)
+                Supported: JSON (FET export), CSV, SQL, XML, BIN (Max 100MB)
               </p>
               
               <div className="flex gap-2 justify-end">
@@ -674,6 +795,7 @@ export default function DatabasePage() {
                     setImportDialogOpen(false);
                     setSelectedFile(null);
                   }}
+                  disabled={isLoading}
                 >
                   Cancel
                 </Button>
@@ -681,7 +803,12 @@ export default function DatabasePage() {
                   onClick={handleImportSubmit}
                   disabled={!selectedFile || isLoading}
                 >
-                  {isLoading ? "Importing..." : "Import Data"}
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Importing...
+                    </>
+                  ) : "Import Data"}
                 </Button>
               </div>
             </div>
