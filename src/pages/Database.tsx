@@ -33,6 +33,7 @@ import {
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 export default function DatabasePage() {
   const { toast } = useToast();
@@ -43,6 +44,7 @@ export default function DatabasePage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
+  const [fileFormat, setFileFormat] = useState<"json" | "binary">("json");
   const [dbStats, setDbStats] = useState({
     players: 0,
     teams: 0,
@@ -165,8 +167,19 @@ export default function DatabasePage() {
     try {
       const fileName = selectedFile.name.toLowerCase();
       
-      // Check if it's a JSON file (FET export format)
-      if (fileName.endsWith('.json')) {
+      if (fileFormat === "json") {
+        // JSON file (FET export format)
+        if (!fileName.endsWith('.json')) {
+          toast({
+            title: "Invalid File Type",
+            description: "Please select a JSON file for FET export format.",
+            variant: "destructive",
+          });
+          setIsLoading(false);
+          setImportProgress(0);
+          return;
+        }
+        
         setImportProgress(20);
         const data = await parseJsonFile(selectedFile);
         setImportProgress(40);
@@ -194,15 +207,43 @@ export default function DatabasePage() {
           throw new Error(result?.error || "Import failed");
         }
       } else {
-        // For binary files, show a message about FET conversion
-        toast({
-          title: "Binary File Detected",
-          description: "Please use FIFA Editor Tool (FET) to export this file to JSON format first, then import the JSON file.",
-          variant: "destructive",
+        // Binary squad file - parse with edge function
+        setImportProgress(20);
+        
+        // Read file as base64
+        const arrayBuffer = await selectedFile.arrayBuffer();
+        const base64 = btoa(
+          new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+        );
+        
+        setImportProgress(40);
+        
+        // Call edge function to parse and import binary data
+        const { data: result, error } = await supabase.functions.invoke('parse-squad-file', {
+          body: { 
+            fileData: base64, 
+            fileName: selectedFile.name,
+            importType 
+          },
         });
-        setIsLoading(false);
-        setImportProgress(0);
-        return;
+        
+        setImportProgress(90);
+        
+        if (error) {
+          throw error;
+        }
+        
+        if (result?.success) {
+          toast({
+            title: "Import Complete",
+            description: `Successfully imported data: ${result.results.players?.inserted || 0} players, ${result.results.teams?.inserted || 0} teams`,
+          });
+          
+          // Refresh stats
+          await fetchDatabaseStats();
+        } else {
+          throw new Error(result?.error || "Import failed");
+        }
       }
       
       setImportProgress(100);
@@ -698,6 +739,31 @@ export default function DatabasePage() {
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
+              <div className="space-y-3">
+                <Label>File Format</Label>
+                <RadioGroup 
+                  value={fileFormat} 
+                  onValueChange={(v) => setFileFormat(v as "json" | "binary")}
+                  disabled={isLoading}
+                  className="grid grid-cols-2 gap-4"
+                >
+                  <div className={`flex items-center space-x-2 p-3 border rounded-lg cursor-pointer transition-colors ${fileFormat === 'json' ? 'border-primary bg-primary/5' : 'border-border/50 hover:border-primary/30'}`}>
+                    <RadioGroupItem value="json" id="json" />
+                    <Label htmlFor="json" className="cursor-pointer flex-1">
+                      <span className="font-medium block">FET JSON Export</span>
+                      <span className="text-xs text-muted-foreground">Converted via FIFA Editor Tool</span>
+                    </Label>
+                  </div>
+                  <div className={`flex items-center space-x-2 p-3 border rounded-lg cursor-pointer transition-colors ${fileFormat === 'binary' ? 'border-primary bg-primary/5' : 'border-border/50 hover:border-primary/30'}`}>
+                    <RadioGroupItem value="binary" id="binary" />
+                    <Label htmlFor="binary" className="cursor-pointer flex-1">
+                      <span className="font-medium block">Binary Squad File</span>
+                      <span className="text-xs text-muted-foreground">Raw game files (.bin, etc)</span>
+                    </Label>
+                  </div>
+                </RadioGroup>
+              </div>
+
               <div className="space-y-2">
                 <Label>Import Type</Label>
                 <Select value={importType} onValueChange={setImportType} disabled={isLoading}>
@@ -780,12 +846,16 @@ export default function DatabasePage() {
               <Alert className="bg-muted/50">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription className="text-xs">
-                  <strong>FET Export:</strong> Use FIFA Editor Tool to export your database to JSON format for best results. Binary files (.bin, FB chunks) require FET conversion first.
+                  {fileFormat === "json" ? (
+                    <><strong>FET JSON:</strong> Use FIFA Editor Tool to export your database to JSON format. This provides the most complete and accurate data import.</>
+                  ) : (
+                    <><strong>Binary Squad:</strong> Upload raw game squad files directly. Note: Binary parsing may have limited attribute support compared to FET exports.</>
+                  )}
                 </AlertDescription>
               </Alert>
               
               <p className="text-xs text-muted-foreground">
-                Supported: JSON (FET export), CSV, SQL, XML, BIN (Max 100MB)
+                {fileFormat === "json" ? "Supported: .json files (Max 100MB)" : "Supported: .bin, squad files, and other binary formats (Max 100MB)"}
               </p>
               
               <div className="flex gap-2 justify-end">

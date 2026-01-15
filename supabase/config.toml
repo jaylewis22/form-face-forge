@@ -2,3 +2,6 @@ project_id = "tgtezttjspmfvvftvjbi"
 
 [functions.import-database]
 verify_jwt = false
+
+[functions.parse-squad-file]
+verify_jwt = false
