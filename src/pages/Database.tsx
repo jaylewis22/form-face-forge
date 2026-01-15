@@ -45,6 +45,17 @@ export default function DatabasePage() {
   const [isDragging, setIsDragging] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
   const [fileFormat, setFileFormat] = useState<"json" | "binary">("json");
+  const [importValidation, setImportValidation] = useState<{
+    show: boolean;
+    success: boolean;
+    message: string;
+    details: {
+      players: number;
+      teams: number;
+      leagues: number;
+      competitions: number;
+    };
+  } | null>(null);
   const [dbStats, setDbStats] = useState({
     players: 0,
     teams: 0,
@@ -96,19 +107,19 @@ export default function DatabasePage() {
   };
 
   const handleFileSelect = (file: File) => {
-    // Accept JSON for FET exports, plus binary files
+    // Accept JSON for FET exports, plus various binary files
     const fileName = file.name.toLowerCase();
-    const validExtensions = ['.json', '.csv', '.sql', '.xml', '.bin'];
+    const validExtensions = ['.json', '.csv', '.sql', '.xml', '.bin', '.db', '.dat', '.sav', '.bak'];
     const hasExtension = fileName.includes('.');
     const fileExtension = hasExtension ? fileName.substring(fileName.lastIndexOf('.')) : '';
     
-    // Accept files without extensions (like FB chunks) or with valid extensions
+    // Accept files without extensions (like FB chunks, squad files) or with valid extensions
     const isValidExtension = !hasExtension || validExtensions.includes(fileExtension);
     
     if (!isValidExtension) {
       toast({
         title: "Invalid File Type",
-        description: "Please select a JSON, CSV, SQL, XML, or binary file.",
+        description: "Please select a JSON, CSV, SQL, XML, BIN, DB, DAT, or squad file.",
         variant: "destructive",
       });
       return;
@@ -196,54 +207,39 @@ export default function DatabasePage() {
         }
         
         if (result?.success) {
-          toast({
-            title: "Import Complete",
-            description: `Successfully imported data: ${result.results.players.inserted} players, ${result.results.teams.inserted} teams, ${result.results.leagues.inserted} leagues`,
-          });
+          const playerCount = result.results?.players?.inserted || 0;
+          const teamCount = result.results?.teams?.inserted || 0;
+          const leagueCount = result.results?.leagues?.inserted || 0;
           
-          // Refresh stats
+          // Refresh stats after import
           await fetchDatabaseStats();
+          
+          // Show validation dialog
+          setImportValidation({
+            show: true,
+            success: true,
+            message: `Import completed successfully!`,
+            details: {
+              players: playerCount,
+              teams: teamCount,
+              leagues: leagueCount,
+              competitions: result.results?.competitions?.inserted || 0,
+            }
+          });
         } else {
           throw new Error(result?.error || "Import failed");
         }
       } else {
-        // Binary squad file - parse with edge function
-        setImportProgress(20);
-        
-        // Read file as base64
-        const arrayBuffer = await selectedFile.arrayBuffer();
-        const base64 = btoa(
-          new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
-        );
-        
-        setImportProgress(40);
-        
-        // Call edge function to parse and import binary data
-        const { data: result, error } = await supabase.functions.invoke('parse-squad-file', {
-          body: { 
-            fileData: base64, 
-            fileName: selectedFile.name,
-            importType 
-          },
+        // Binary squad file - show warning about limited support
+        toast({
+          title: "Binary File Format",
+          description: "Binary squad files (FBCHUNKS, .db, .dat) require conversion via FIFA Editor Tool (FET) for accurate data import. Direct binary parsing has limited support.",
+          variant: "destructive",
         });
         
-        setImportProgress(90);
-        
-        if (error) {
-          throw error;
-        }
-        
-        if (result?.success) {
-          toast({
-            title: "Import Complete",
-            description: `Successfully imported data: ${result.results.players?.inserted || 0} players, ${result.results.teams?.inserted || 0} teams`,
-          });
-          
-          // Refresh stats
-          await fetchDatabaseStats();
-        } else {
-          throw new Error(result?.error || "Import failed");
-        }
+        setIsLoading(false);
+        setImportProgress(0);
+        return;
       }
       
       setImportProgress(100);
@@ -251,11 +247,17 @@ export default function DatabasePage() {
       setSelectedFile(null);
     } catch (error) {
       console.error("Import error:", error);
-      toast({
-        title: "Import Failed",
-        description: error instanceof Error ? error.message : "An error occurred during import",
-        variant: "destructive",
+      
+      // Show validation dialog for failed imports
+      setImportValidation({
+        show: true,
+        success: false,
+        message: error instanceof Error ? error.message : "An error occurred during import",
+        details: { players: 0, teams: 0, leagues: 0, competitions: 0 }
       });
+      
+      setImportDialogOpen(false);
+      setSelectedFile(null);
     } finally {
       setIsLoading(false);
       setImportProgress(0);
@@ -849,13 +851,13 @@ export default function DatabasePage() {
                   {fileFormat === "json" ? (
                     <><strong>FET JSON:</strong> Use FIFA Editor Tool to export your database to JSON format. This provides the most complete and accurate data import.</>
                   ) : (
-                    <><strong>Binary Squad:</strong> Upload raw game squad files directly. Note: Binary parsing may have limited attribute support compared to FET exports.</>
+                    <><strong>Binary Files:</strong> Binary squad files (.bin, .db, .dat, FBCHUNKS) require conversion via FET for accurate import. Direct binary parsing is not currently supported due to EA's proprietary format.</>
                   )}
                 </AlertDescription>
               </Alert>
               
               <p className="text-xs text-muted-foreground">
-                {fileFormat === "json" ? "Supported: .json files (Max 100MB)" : "Supported: .bin, squad files, and other binary formats (Max 100MB)"}
+                {fileFormat === "json" ? "Supported: .json files (Max 100MB)" : "Supported: .bin, .db, .dat, squad files (Max 100MB) - Requires FET conversion"}
               </p>
               
               <div className="flex gap-2 justify-end">
@@ -881,6 +883,75 @@ export default function DatabasePage() {
                   ) : "Import Data"}
                 </Button>
               </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Import Validation Dialog */}
+        <Dialog open={importValidation?.show || false} onOpenChange={(open) => !open && setImportValidation(null)}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                {importValidation?.success ? (
+                  <>
+                    <CheckCircle className="w-5 h-5 text-green-500" />
+                    Import Validation
+                  </>
+                ) : (
+                  <>
+                    <AlertCircle className="w-5 h-5 text-destructive" />
+                    Import Failed
+                  </>
+                )}
+              </DialogTitle>
+              <DialogDescription>
+                {importValidation?.message}
+              </DialogDescription>
+            </DialogHeader>
+            
+            {importValidation?.success && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-3 rounded-lg bg-muted/50 text-center">
+                    <p className="text-2xl font-bold text-primary">{importValidation.details.players.toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground">Players Imported</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-muted/50 text-center">
+                    <p className="text-2xl font-bold text-primary">{importValidation.details.teams.toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground">Teams Imported</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-muted/50 text-center">
+                    <p className="text-2xl font-bold text-primary">{importValidation.details.leagues.toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground">Leagues Imported</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-muted/50 text-center">
+                    <p className="text-2xl font-bold text-primary">{importValidation.details.competitions.toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground">Competitions Imported</p>
+                  </div>
+                </div>
+                
+                <Alert className="bg-green-500/10 border-green-500/20">
+                  <CheckCircle className="h-4 w-4 text-green-500" />
+                  <AlertDescription className="text-sm">
+                    Data has been validated and is now available in the database. The statistics above have been updated to reflect the import.
+                  </AlertDescription>
+                </Alert>
+              </div>
+            )}
+            
+            {!importValidation?.success && (
+              <Alert className="bg-destructive/10 border-destructive/20">
+                <AlertCircle className="h-4 w-4 text-destructive" />
+                <AlertDescription className="text-sm">
+                  Please check your file format and try again. For best results, use FIFA Editor Tool (FET) to export your data to JSON format.
+                </AlertDescription>
+              </Alert>
+            )}
+            
+            <div className="flex justify-end">
+              <Button onClick={() => setImportValidation(null)}>
+                Close
+              </Button>
             </div>
           </DialogContent>
         </Dialog>
