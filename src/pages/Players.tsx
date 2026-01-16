@@ -3,77 +3,122 @@ import { useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/Layout/AppLayout";
 import { PlayerCard } from "@/components/Player/PlayerCard";
 import { PlayerList } from "@/components/Player/PlayerList";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import { Search } from "lucide-react";
+import { Search, Users } from "lucide-react";
+import { usePlayers, Player } from "@/hooks/usePlayers";
+import { Skeleton } from "@/components/ui/skeleton";
 
-const mockPlayers = [
-  {
-    id: "1",
-    name: "Marcus Sterling",
-    position: "Forward",
-    number: 10,
-    age: 24,
-    nationality: "England",
-    weight: "75kg",
-    height: "180cm",
-    rating: 88,
-    status: "fit" as const,
+// Helper to format database player to component format
+function formatPlayerForList(player: Player) {
+  return {
+    id: String(player.id),
+    name: player.name,
+    position: player.position || "Unknown",
+    number: player.jersey_number || 0,
+    age: player.age || 0,
+    nationality: player.nationality || "Unknown",
+    rating: player.overall_rating || undefined,
+  };
+}
+
+function formatPlayerForCard(player: Player) {
+  return {
+    id: String(player.id),
+    name: player.name,
+    position: player.position || "Unknown",
+    number: player.jersey_number || 0,
+    age: player.age || 0,
+    nationality: player.nationality || "Unknown",
+    weight: player.weight ? `${player.weight}kg` : "N/A",
+    height: player.height ? `${player.height}cm` : undefined,
     attributes: [
-      { name: "Pace", value: 85, max: 100 },
-      { name: "Shooting", value: 78, max: 100 },
-      { name: "Passing", value: 82, max: 100 },
+      { name: "Pace", value: player.pace || 0, max: 100 },
+      { name: "Shooting", value: player.shooting || 0, max: 100 },
+      { name: "Passing", value: player.passing || 0, max: 100 },
+      { name: "Dribbling", value: player.dribbling || 0, max: 100 },
+      { name: "Defending", value: player.defending || 0, max: 100 },
+      { name: "Physical", value: player.physical || 0, max: 100 },
     ],
     contractStatus: "Active",
-  },
-  {
-    id: "2",
-    name: "João Silva",
-    position: "Midfielder",
-    number: 8,
-    age: 26,
-    nationality: "Brazil",
-    weight: "72kg",
-    height: "175cm",
-    rating: 85,
-    status: "fit" as const,
-    attributes: [
-      { name: "Pace", value: 78, max: 100 },
-      { name: "Shooting", value: 72, max: 100 },
-      { name: "Passing", value: 88, max: 100 },
-    ],
-    contractStatus: "Active",
-  },
-  {
-    id: "3",
-    name: "Lucas Martinez",
-    position: "Defender",
-    number: 4,
-    age: 28,
-    nationality: "Spain",
-    weight: "82kg",
-    height: "185cm",
-    rating: 84,
-    status: "injured" as const,
-    attributes: [
-      { name: "Pace", value: 72, max: 100 },
-      { name: "Shooting", value: 45, max: 100 },
-      { name: "Passing", value: 76, max: 100 },
-    ],
-    contractStatus: "Active",
-    injuryStatus: "Injured",
-  },
-];
+  };
+}
 
 export default function Players() {
   const navigate = useNavigate();
-  const [selectedPlayer, setSelectedPlayer] = useState(mockPlayers[0]);
+  const { data: players, isLoading, error } = usePlayers();
+  const [selectedPlayerId, setSelectedPlayerId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
-  const filteredPlayers = mockPlayers.filter((player) =>
+  const filteredPlayers = players?.filter((player) =>
     player.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    player.position.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+    (player.position?.toLowerCase().includes(searchQuery.toLowerCase()))
+  ) || [];
+
+  const selectedPlayer = players?.find(p => p.id === selectedPlayerId) || players?.[0];
+
+  if (isLoading) {
+    return (
+      <AppLayout>
+        <div className="space-y-6 animate-fade-in">
+          <div>
+            <h1 className="text-3xl font-bold mb-2">Players</h1>
+            <p className="text-muted-foreground">Manage your squad and player details</p>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-1">
+              <div className="glass rounded-xl p-6">
+                <Skeleton className="h-6 w-24 mb-4" />
+                <div className="space-y-2">
+                  {[...Array(5)].map((_, i) => (
+                    <Skeleton key={i} className="h-20 w-full" />
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="lg:col-span-2">
+              <Skeleton className="h-96 w-full rounded-xl" />
+            </div>
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <AppLayout>
+        <div className="space-y-6 animate-fade-in">
+          <div>
+            <h1 className="text-3xl font-bold mb-2">Players</h1>
+            <p className="text-muted-foreground">Manage your squad and player details</p>
+          </div>
+          <div className="glass rounded-xl p-8 text-center">
+            <p className="text-destructive">Error loading players: {error.message}</p>
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (!players || players.length === 0) {
+    return (
+      <AppLayout>
+        <div className="space-y-6 animate-fade-in">
+          <div>
+            <h1 className="text-3xl font-bold mb-2">Players</h1>
+            <p className="text-muted-foreground">Manage your squad and player details</p>
+          </div>
+          <div className="glass rounded-xl p-8 text-center">
+            <Users className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
+            <h2 className="text-xl font-semibold mb-2">No Players Found</h2>
+            <p className="text-muted-foreground">
+              Import a database to see player data here.
+            </p>
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout>
@@ -99,17 +144,19 @@ export default function Players() {
           {/* Player List */}
           <div className="lg:col-span-1">
             <div className="glass rounded-xl p-6">
-              <h2 className="text-lg font-semibold mb-4">Squad</h2>
+              <h2 className="text-lg font-semibold mb-4">Squad ({filteredPlayers.length})</h2>
               <PlayerList
-                players={filteredPlayers}
-                onPlayerClick={(player) => navigate(`/players/${player.id}`)}
+                players={filteredPlayers.map(formatPlayerForList)}
+                onPlayerClick={(player) => {
+                  setSelectedPlayerId(Number(player.id));
+                }}
               />
             </div>
           </div>
 
           {/* Player Details */}
           <div className="lg:col-span-2">
-            {selectedPlayer && <PlayerCard player={selectedPlayer} />}
+            {selectedPlayer && <PlayerCard player={formatPlayerForCard(selectedPlayer)} />}
           </div>
         </div>
       </div>
