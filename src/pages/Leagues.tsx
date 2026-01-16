@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { AppLayout } from "@/components/Layout/AppLayout";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -20,79 +20,116 @@ import {
 import { Card } from "@/components/ui/card";
 import { Search, ChevronLeft, ChevronRight, Trophy } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-
-// Mock data for teams
-const mockTeams = [
-  { id: 1, name: "Arsenal", short: "ARS", code: "ENG", league: "England Premier League (1)", ovr: 83 },
-  { id: 2, name: "Aston Villa", short: "AVL", code: "ENG", league: "England Premier League (1)", ovr: 80 },
-  { id: 3, name: "Blackburn Rovers", short: "BLB", code: "ENG", league: "England Championship (2)", ovr: 69 },
-  { id: 4, name: "Bolton Wanderers", short: "BOL", code: "ENG", league: "England League One (3)", ovr: 66 },
-  { id: 5, name: "Chelsea", short: "CHE", code: "ENG", league: "England Premier League (1)", ovr: 80 },
-  { id: 7, name: "Everton", short: "EVE", code: "ENG", league: "England Premier League (1)", ovr: 76 },
-  { id: 8, name: "Leeds United", short: "LEE", code: "ENG", league: "England Championship (2)", ovr: 73 },
-  { id: 9, name: "Liverpool", short: "LIV", code: "ENG", league: "England Premier League (1)", ovr: 83 },
-  { id: 10, name: "Manchester City", short: "MCI", code: "ENG", league: "England Premier League (1)", ovr: 86 },
-  { id: 11, name: "Manchester United", short: "MUN", code: "ENG", league: "England Premier League (1)", ovr: 82 },
-  { id: 12, name: "Newcastle United", short: "NEW", code: "ENG", league: "England Premier League (1)", ovr: 78 },
-  { id: 13, name: "Real Madrid", short: "RMA", code: "ESP", league: "Spain Primera División (1)", ovr: 87 },
-  { id: 14, name: "Barcelona", short: "BAR", code: "ESP", league: "Spain Primera División (1)", ovr: 85 },
-  { id: 15, name: "Atlético Madrid", short: "ATM", code: "ESP", league: "Spain Primera División (1)", ovr: 83 },
-  { id: 16, name: "Bayern Munich", short: "BAY", code: "GER", league: "Germany Bundesliga (1)", ovr: 86 },
-  { id: 17, name: "Borussia Dortmund", short: "BVB", code: "GER", league: "Germany Bundesliga (1)", ovr: 82 },
-  { id: 18, name: "Paris Saint-Germain", short: "PSG", code: "FRA", league: "France Ligue 1 (1)", ovr: 85 },
-  { id: 19, name: "Juventus", short: "JUV", code: "ITA", league: "Italy Serie A (1)", ovr: 82 },
-  { id: 20, name: "AC Milan", short: "ACM", code: "ITA", league: "Italy Serie A (1)", ovr: 80 },
-];
-
-const countries = ["All countries", "England", "Spain", "Germany", "France", "Italy", "Netherlands", "Portugal"];
-const leagues = [
-  "All leagues",
-  "England Premier League (1)",
-  "England Championship (2)",
-  "England League One (3)",
-  "Spain Primera División (1)",
-  "Germany Bundesliga (1)",
-  "France Ligue 1 (1)",
-  "Italy Serie A (1)",
-];
+import { Skeleton } from "@/components/ui/skeleton";
+import { useTeams } from "@/hooks/useTeams";
+import { useLeagues } from "@/hooks/useLeagues";
 
 export default function Leagues() {
+  const { data: teams, isLoading: teamsLoading } = useTeams();
+  const { data: leagues, isLoading: leaguesLoading } = useLeagues();
+  
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedCountry, setSelectedCountry] = useState("All countries");
-  const [selectedLeague, setSelectedLeague] = useState("All leagues");
+  const [selectedCountry, setSelectedCountry] = useState("all");
+  const [selectedLeague, setSelectedLeague] = useState("all");
   const [itemsPerPage, setItemsPerPage] = useState("50");
   const [currentPage, setCurrentPage] = useState(1);
 
+  // Create a league map for quick lookups
+  const leagueMap = useMemo(() => {
+    return new Map(leagues?.map(l => [l.id, l]) || []);
+  }, [leagues]);
+
+  // Get unique countries from teams
+  const countries = useMemo(() => {
+    if (!teams) return [];
+    const codes = new Set(teams.map(t => t.country_code).filter(Boolean));
+    return Array.from(codes).sort();
+  }, [teams]);
+
   // Filter teams based on search and selections
-  const filteredTeams = mockTeams.filter((team) => {
-    const matchesSearch = 
-      team.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      team.short.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      team.code.toLowerCase().includes(searchTerm.toLowerCase());
+  const filteredTeams = useMemo(() => {
+    if (!teams) return [];
     
-    const matchesCountry = selectedCountry === "All countries" || 
-      (selectedCountry === "England" && team.code === "ENG") ||
-      (selectedCountry === "Spain" && team.code === "ESP") ||
-      (selectedCountry === "Germany" && team.code === "GER") ||
-      (selectedCountry === "France" && team.code === "FRA") ||
-      (selectedCountry === "Italy" && team.code === "ITA");
-    
-    const matchesLeague = selectedLeague === "All leagues" || team.league === selectedLeague;
-    
-    return matchesSearch && matchesCountry && matchesLeague;
-  });
+    return teams.filter((team) => {
+      const matchesSearch = 
+        team.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (team.short_name?.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (team.country_code?.toLowerCase().includes(searchTerm.toLowerCase()));
+      
+      const matchesCountry = selectedCountry === "all" || team.country_code === selectedCountry;
+      
+      const matchesLeague = selectedLeague === "all" || String(team.league_id) === selectedLeague;
+      
+      return matchesSearch && matchesCountry && matchesLeague;
+    });
+  }, [teams, searchTerm, selectedCountry, selectedLeague]);
 
   const totalPages = Math.ceil(filteredTeams.length / parseInt(itemsPerPage));
   const startIndex = (currentPage - 1) * parseInt(itemsPerPage);
   const paginatedTeams = filteredTeams.slice(startIndex, startIndex + parseInt(itemsPerPage));
 
-  const getOvrColor = (ovr: number) => {
+  const getOvrColor = (ovr: number | null) => {
+    if (!ovr) return "text-muted-foreground";
     if (ovr >= 85) return "text-emerald-500";
     if (ovr >= 80) return "text-green-500";
     if (ovr >= 75) return "text-yellow-500";
     if (ovr >= 70) return "text-orange-500";
     return "text-red-500";
   };
+
+  const isLoading = teamsLoading || leaguesLoading;
+
+  if (isLoading) {
+    return (
+      <AppLayout>
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Trophy className="h-8 w-8 text-primary" />
+              <h1 className="text-3xl font-bold">Leagues & Teams</h1>
+            </div>
+          </div>
+          <Card className="p-4">
+            <Skeleton className="h-10 w-full mb-4" />
+            <div className="grid grid-cols-3 gap-4">
+              <Skeleton className="h-10" />
+              <Skeleton className="h-10" />
+              <Skeleton className="h-10" />
+            </div>
+          </Card>
+          <Card className="overflow-hidden">
+            <div className="p-4 space-y-4">
+              {[...Array(10)].map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          </Card>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (!teams || teams.length === 0) {
+    return (
+      <AppLayout>
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Trophy className="h-8 w-8 text-primary" />
+              <h1 className="text-3xl font-bold">Leagues & Teams</h1>
+            </div>
+          </div>
+          <Card className="p-8 text-center">
+            <Trophy className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
+            <h2 className="text-xl font-semibold mb-2">No Teams Found</h2>
+            <p className="text-muted-foreground">
+              Import a database to see leagues and teams here.
+            </p>
+          </Card>
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout>
@@ -117,33 +154,38 @@ export default function Leagues() {
               <Input
                 placeholder="Search teams (name, short, code)..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setCurrentPage(1);
+                }}
                 className="pl-10"
               />
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Select value={selectedCountry} onValueChange={setSelectedCountry}>
+              <Select value={selectedCountry} onValueChange={(v) => { setSelectedCountry(v); setCurrentPage(1); }}>
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="All Countries" />
                 </SelectTrigger>
                 <SelectContent>
-                  {countries.map((country) => (
-                    <SelectItem key={country} value={country}>
-                      {country}
+                  <SelectItem value="all">All Countries</SelectItem>
+                  {countries.map((code) => (
+                    <SelectItem key={code} value={code!}>
+                      {code}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
 
-              <Select value={selectedLeague} onValueChange={setSelectedLeague}>
+              <Select value={selectedLeague} onValueChange={(v) => { setSelectedLeague(v); setCurrentPage(1); }}>
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="All Leagues" />
                 </SelectTrigger>
                 <SelectContent>
-                  {leagues.map((league) => (
-                    <SelectItem key={league} value={league}>
-                      {league}
+                  <SelectItem value="all">All Leagues</SelectItem>
+                  {leagues?.map((league) => (
+                    <SelectItem key={league.id} value={String(league.id)}>
+                      {league.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -186,14 +228,16 @@ export default function Leagues() {
                   >
                     <TableCell className="font-medium">{team.id}</TableCell>
                     <TableCell className="font-semibold">{team.name}</TableCell>
-                    <TableCell className="text-muted-foreground">{team.short}</TableCell>
+                    <TableCell className="text-muted-foreground">{team.short_name || "-"}</TableCell>
                     <TableCell>
-                      <Badge variant="outline">{team.code}</Badge>
+                      <Badge variant="outline">{team.country_code || "-"}</Badge>
                     </TableCell>
-                    <TableCell className="text-sm">{team.league}</TableCell>
+                    <TableCell className="text-sm">
+                      {team.league_id ? leagueMap.get(team.league_id)?.name || "-" : "-"}
+                    </TableCell>
                     <TableCell className="text-right">
-                      <span className={`font-bold ${getOvrColor(team.ovr)}`}>
-                        {team.ovr}
+                      <span className={`font-bold ${getOvrColor(team.overall_rating)}`}>
+                        {team.overall_rating || "-"}
                       </span>
                     </TableCell>
                   </TableRow>

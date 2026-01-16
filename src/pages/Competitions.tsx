@@ -29,52 +29,14 @@ import {
   Award
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-// Mock data for existing competitions
-const mockCompetitions = [
-  {
-    id: 1,
-    name: "Premier League 2024/25",
-    type: "League",
-    status: "Active",
-    teams: 20,
-    startDate: "2024-08-17",
-    endDate: "2025-05-19",
-    currentRound: "Week 15",
-  },
-  {
-    id: 2,
-    name: "FA Cup 2024/25",
-    type: "Cup",
-    status: "Active",
-    teams: 64,
-    startDate: "2024-11-01",
-    endDate: "2025-05-25",
-    currentRound: "Round of 32",
-  },
-  {
-    id: 3,
-    name: "Champions League 2024/25",
-    type: "Tournament",
-    status: "Active",
-    teams: 32,
-    startDate: "2024-09-17",
-    endDate: "2025-06-01",
-    currentRound: "Group Stage",
-  },
-  {
-    id: 4,
-    name: "Summer Friendlies 2024",
-    type: "Friendly",
-    status: "Completed",
-    teams: 8,
-    startDate: "2024-07-01",
-    endDate: "2024-07-31",
-    currentRound: "Finished",
-  },
-];
+import { useCompetitions } from "@/hooks/useCompetitions";
+import { useTeams } from "@/hooks/useTeams";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function Competitions() {
+  const { data: competitions, isLoading: competitionsLoading } = useCompetitions();
+  const { data: teams, isLoading: teamsLoading } = useTeams();
+  
   const [selectedType, setSelectedType] = useState("all");
   const [startDate, setStartDate] = useState<Date>();
   const [endDate, setEndDate] = useState<Date>();
@@ -83,37 +45,64 @@ export default function Competitions() {
   const [numberOfTeams, setNumberOfTeams] = useState("");
   const [format, setFormat] = useState("");
 
-  const filteredCompetitions = mockCompetitions.filter(comp => 
-    selectedType === "all" || comp.type.toLowerCase() === selectedType
-  );
+  const filteredCompetitions = competitions?.filter(comp => 
+    selectedType === "all" || comp.competition_type?.toLowerCase() === selectedType
+  ) || [];
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "Active":
-        return "bg-green-500/10 text-green-500 border-green-500/20";
-      case "Upcoming":
-        return "bg-blue-500/10 text-blue-500 border-blue-500/20";
-      case "Completed":
-        return "bg-gray-500/10 text-gray-500 border-gray-500/20";
-      default:
-        return "bg-gray-500/10 text-gray-500 border-gray-500/20";
-    }
-  };
-
-  const getTypeIcon = (type: string) => {
-    switch (type) {
-      case "League":
+  const getTypeIcon = (type: string | null) => {
+    switch (type?.toLowerCase()) {
+      case "league":
         return <Shield className="h-4 w-4" />;
-      case "Cup":
+      case "cup":
         return <Trophy className="h-4 w-4" />;
-      case "Tournament":
+      case "tournament":
         return <Target className="h-4 w-4" />;
-      case "Friendly":
+      case "friendly":
         return <Users className="h-4 w-4" />;
       default:
         return <Trophy className="h-4 w-4" />;
     }
   };
+
+  const isLoading = competitionsLoading || teamsLoading;
+
+  if (isLoading) {
+    return (
+      <AppLayout>
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Trophy className="h-8 w-8 text-primary" />
+              <h1 className="text-3xl font-bold">Competitions</h1>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {[...Array(4)].map((_, i) => (
+              <Card key={i}>
+                <CardHeader className="pb-3">
+                  <Skeleton className="h-4 w-24" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-8 w-12" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          <Card className="p-6">
+            <div className="space-y-4">
+              {[...Array(3)].map((_, i) => (
+                <Skeleton key={i} className="h-24 w-full" />
+              ))}
+            </div>
+          </Card>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  const totalCompetitions = competitions?.length || 0;
+  const totalTeams = teams?.length || 0;
+  const competitionTypes = [...new Set(competitions?.map(c => c.competition_type).filter(Boolean))];
 
   return (
     <AppLayout>
@@ -135,12 +124,12 @@ export default function Competitions() {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                Active Competitions
+                Total Competitions
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">3</div>
-              <p className="text-xs text-muted-foreground mt-1">Currently running</p>
+              <div className="text-2xl font-bold">{totalCompetitions}</div>
+              <p className="text-xs text-muted-foreground mt-1">In database</p>
             </CardContent>
           </Card>
           <Card>
@@ -150,30 +139,32 @@ export default function Competitions() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">124</div>
-              <p className="text-xs text-muted-foreground mt-1">Across all competitions</p>
+              <div className="text-2xl font-bold">{totalTeams}</div>
+              <p className="text-xs text-muted-foreground mt-1">Available</p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                Matches Scheduled
+                Competition Types
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">256</div>
-              <p className="text-xs text-muted-foreground mt-1">This season</p>
+              <div className="text-2xl font-bold">{competitionTypes.length}</div>
+              <p className="text-xs text-muted-foreground mt-1">Categories</p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                Completed
+                Countries
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">1</div>
-              <p className="text-xs text-muted-foreground mt-1">This year</p>
+              <div className="text-2xl font-bold">
+                {[...new Set(competitions?.map(c => c.country_code).filter(Boolean))].length}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Represented</p>
             </CardContent>
           </Card>
         </div>
@@ -200,62 +191,76 @@ export default function Competitions() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Types</SelectItem>
-                    <SelectItem value="league">League</SelectItem>
-                    <SelectItem value="cup">Cup</SelectItem>
-                    <SelectItem value="tournament">Tournament</SelectItem>
-                    <SelectItem value="friendly">Friendly</SelectItem>
+                    {competitionTypes.map((type) => (
+                      <SelectItem key={type} value={type!.toLowerCase()}>
+                        {type}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </CardContent>
             </Card>
 
             {/* Competitions List */}
-            <div className="grid gap-4">
-              {filteredCompetitions.map((comp) => (
-                <Card key={comp.id} className="hover:shadow-lg transition-shadow cursor-pointer">
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className="p-3 rounded-lg bg-primary/10">
-                          {getTypeIcon(comp.type)}
+            {filteredCompetitions.length > 0 ? (
+              <div className="grid gap-4">
+                {filteredCompetitions.map((comp) => (
+                  <Card key={comp.id} className="hover:shadow-lg transition-shadow cursor-pointer">
+                    <CardContent className="p-6">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className="p-3 rounded-lg bg-primary/10">
+                            {getTypeIcon(comp.competition_type)}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2 mb-2">
+                              <h3 className="text-lg font-semibold">{comp.name}</h3>
+                              {comp.competition_type && (
+                                <Badge variant="secondary">
+                                  {comp.competition_type}
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                              {comp.short_name && (
+                                <span className="flex items-center gap-1">
+                                  <Flag className="h-3 w-3" />
+                                  {comp.short_name}
+                                </span>
+                              )}
+                              {comp.country_code && (
+                                <Badge variant="outline" className="text-xs">
+                                  {comp.country_code}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                        <div>
-                          <div className="flex items-center gap-2 mb-2">
-                            <h3 className="text-lg font-semibold">{comp.name}</h3>
-                            <Badge className={getStatusColor(comp.status)}>
-                              {comp.status}
-                            </Badge>
-                          </div>
-                          <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                            <span className="flex items-center gap-1">
-                              <Users className="h-3 w-3" />
-                              {comp.teams} teams
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <CalendarIcon className="h-3 w-3" />
-                              {comp.startDate} - {comp.endDate}
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <Flag className="h-3 w-3" />
-                              {comp.currentRound}
-                            </span>
-                          </div>
+                        <div className="flex items-center gap-2">
+                          <Button variant="outline" size="sm">
+                            <Settings className="h-4 w-4" />
+                          </Button>
+                          <Button size="sm">
+                            View Details
+                            <ChevronRight className="h-4 w-4 ml-1" />
+                          </Button>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Button variant="outline" size="sm">
-                          <Settings className="h-4 w-4" />
-                        </Button>
-                        <Button size="sm">
-                          View Details
-                          <ChevronRight className="h-4 w-4 ml-1" />
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <Card className="p-8 text-center">
+                <Trophy className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
+                <h2 className="text-xl font-semibold mb-2">No Competitions Found</h2>
+                <p className="text-muted-foreground">
+                  {competitions?.length === 0 
+                    ? "Import a database to see competitions here."
+                    : "No competitions match the selected filter."}
+                </p>
+              </Card>
+            )}
           </TabsContent>
 
           {/* Create New Competition Tab */}
