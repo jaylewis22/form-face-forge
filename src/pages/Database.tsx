@@ -230,16 +230,52 @@ export default function DatabasePage() {
           throw new Error(result?.error || "Import failed");
         }
       } else {
-        // Binary squad file - show warning about limited support
-        toast({
-          title: "Binary File Format",
-          description: "Binary squad files (FBCHUNKS, .db, .dat) require conversion via FIFA Editor Tool (FET) for accurate data import. Direct binary parsing has limited support.",
-          variant: "destructive",
+        // Binary squad file - attempt to parse via edge function
+        setImportProgress(20);
+        
+        // Read file as base64
+        const arrayBuffer = await selectedFile.arrayBuffer();
+        const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+        
+        setImportProgress(40);
+        
+        // Call edge function to parse binary file
+        const { data: result, error } = await supabase.functions.invoke('parse-squad-file', {
+          body: { 
+            fileData: base64, 
+            fileName: selectedFile.name,
+            importType 
+          },
         });
         
-        setIsLoading(false);
-        setImportProgress(0);
-        return;
+        setImportProgress(90);
+        
+        if (error) {
+          throw error;
+        }
+        
+        if (result?.success) {
+          const playerCount = result.results?.players?.inserted || 0;
+          const teamCount = result.results?.teams?.inserted || 0;
+          
+          // Refresh stats after import
+          await fetchDatabaseStats();
+          
+          // Show validation dialog
+          setImportValidation({
+            show: true,
+            success: true,
+            message: result.message || `Import completed successfully!`,
+            details: {
+              players: playerCount,
+              teams: teamCount,
+              leagues: 0,
+              competitions: 0,
+            }
+          });
+        } else {
+          throw new Error(result?.error || result?.hint || "Binary file parsing failed");
+        }
       }
       
       setImportProgress(100);
