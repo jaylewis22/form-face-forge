@@ -264,6 +264,8 @@ export default function DatabasePage() {
         if (result?.success) {
           const playerCount = result.results?.players?.inserted || 0;
           const teamCount = result.results?.teams?.inserted || 0;
+          const leagueCount = result.results?.leagues?.inserted || 0;
+          const competitionCount = result.results?.competitions?.inserted || 0;
           
           // Refresh stats after import
           await fetchDatabaseStats();
@@ -276,8 +278,8 @@ export default function DatabasePage() {
             details: {
               players: playerCount,
               teams: teamCount,
-              leagues: 0,
-              competitions: 0,
+              leagues: leagueCount,
+              competitions: competitionCount,
             }
           });
         } else {
