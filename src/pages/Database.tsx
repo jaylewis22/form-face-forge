@@ -233,9 +233,16 @@ export default function DatabasePage() {
         // Binary squad file - attempt to parse via edge function
         setImportProgress(20);
         
-        // Read file as base64
+        // Read file as base64 using chunked approach to avoid stack overflow
         const arrayBuffer = await selectedFile.arrayBuffer();
-        const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+        const uint8Array = new Uint8Array(arrayBuffer);
+        const chunkSize = 8192;
+        let base64 = '';
+        for (let i = 0; i < uint8Array.length; i += chunkSize) {
+          const chunk = uint8Array.subarray(i, i + chunkSize);
+          base64 += String.fromCharCode.apply(null, Array.from(chunk));
+        }
+        base64 = btoa(base64);
         
         setImportProgress(40);
         
