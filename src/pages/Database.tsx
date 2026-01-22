@@ -283,7 +283,10 @@ export default function DatabasePage() {
             }
           });
         } else {
-          throw new Error(result?.error || result?.hint || "Binary file parsing failed");
+          // Check for specific format-related errors with recommendations
+          const errorMsg = result?.error || result?.hint || "Binary file parsing failed";
+          const recommendation = result?.recommendation || "";
+          throw new Error(recommendation ? `${errorMsg}\n\n${recommendation}` : errorMsg);
         }
       }
       
@@ -293,11 +296,13 @@ export default function DatabasePage() {
     } catch (error) {
       console.error("Import error:", error);
       
+      const errorMessage = error instanceof Error ? error.message : "An error occurred during import";
+      
       // Show validation dialog for failed imports
       setImportValidation({
         show: true,
         success: false,
-        message: error instanceof Error ? error.message : "An error occurred during import",
+        message: errorMessage,
         details: { players: 0, teams: 0, leagues: 0, competitions: 0 }
       });
       
