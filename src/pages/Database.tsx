@@ -990,12 +990,30 @@ export default function DatabasePage() {
             )}
             
             {!importValidation?.success && (
-              <Alert className="bg-destructive/10 border-destructive/20">
-                <AlertCircle className="h-4 w-4 text-destructive" />
-                <AlertDescription className="text-sm">
-                  Please check your file format and try again. For best results, use FIFA Editor Tool (FET) to export your data to JSON format.
-                </AlertDescription>
-              </Alert>
+              <div className="space-y-4">
+                <Alert className="bg-destructive/10 border-destructive/20">
+                  <AlertCircle className="h-4 w-4 text-destructive" />
+                  <AlertDescription className="text-sm whitespace-pre-wrap">
+                    {importValidation?.message?.includes('FBCHUNKS') || importValidation?.message?.includes('Frostbite') ? (
+                      <div className="space-y-3">
+                        <p><strong>Squad file format detected:</strong> Frostbite Engine (FBCHUNKS)</p>
+                        <p>This is a proprietary binary format used by EA's Frostbite engine. Direct parsing is not possible without specialized tools.</p>
+                        <div className="bg-muted/50 p-3 rounded-lg mt-2">
+                          <p className="font-medium mb-2">How to import your squad file:</p>
+                          <ol className="list-decimal list-inside space-y-1 text-xs">
+                            <li>Download and install <strong>FIFA Editor Tool (FET)</strong></li>
+                            <li>Open your squad file in FET</li>
+                            <li>Go to <strong>File → Export → JSON</strong></li>
+                            <li>Import the exported JSON file here</li>
+                          </ol>
+                        </div>
+                      </div>
+                    ) : (
+                      <>Please check your file format and try again. For best results, use FIFA Editor Tool (FET) to export your data to JSON format.</>
+                    )}
+                  </AlertDescription>
+                </Alert>
+              </div>
             )}
             
             <div className="flex justify-end">
