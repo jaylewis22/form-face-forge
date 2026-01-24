@@ -49,6 +49,8 @@ export default function DatabasePage() {
     show: boolean;
     success: boolean;
     message: string;
+    hint?: string;
+    nextSteps?: string[];
     details: {
       players: number;
       teams: number;
@@ -169,6 +171,36 @@ export default function DatabasePage() {
     return JSON.parse(text);
   };
 
+  // Helper to invoke edge function and extract error payload
+  const invokeEdgeFunction = async (
+    functionName: string, 
+    body: Record<string, unknown>
+  ): Promise<{ ok: boolean; status: number; payload: Record<string, unknown> }> => {
+    const { data, error } = await supabase.functions.invoke(functionName, { body });
+
+    if (error) {
+      // supabase-js typically provides the body text in error.context
+      const raw = (error as Record<string, unknown>)?.context as Record<string, unknown> | undefined;
+      const rawBody = raw?.body;
+
+      let payload: Record<string, unknown> | null = null;
+      try { 
+        payload = typeof rawBody === "string" ? JSON.parse(rawBody) : rawBody as Record<string, unknown>; 
+      } catch {
+        // If JSON parsing fails, just use error message
+      }
+
+      return {
+        ok: false,
+        status: (raw?.status as number) ?? 415,
+        payload: payload ?? { success: false, error: error.message },
+      };
+    }
+
+    // Success path
+    return { ok: true, status: 200, payload: data };
+  };
+
   const handleImportSubmit = async () => {
     if (!selectedFile) return;
     
@@ -192,43 +224,81 @@ export default function DatabasePage() {
         }
         
         setImportProgress(20);
-        const data = await parseJsonFile(selectedFile);
+        const fileData = await parseJsonFile(selectedFile);
+        setImportProgress(30);
+
+        // First, try to parse with parse-squad-file to extract structured data
+        const arrayBuffer = await selectedFile.arrayBuffer();
+        const uint8Array = new Uint8Array(arrayBuffer);
+        const chunkSize = 8192;
+        let base64 = '';
+        for (let i = 0; i < uint8Array.length; i += chunkSize) {
+          const chunk = uint8Array.subarray(i, i + chunkSize);
+          base64 += String.fromCharCode.apply(null, Array.from(chunk));
+        }
+        base64 = btoa(base64);
+
         setImportProgress(40);
         
-        // Call edge function to import
-        const { data: result, error } = await supabase.functions.invoke('import-database', {
-          body: { data, importType },
+        // Parse the JSON via edge function
+        const parseResult = await invokeEdgeFunction('parse-squad-file', {
+          fileData: base64,
+          fileName: selectedFile.name,
+          importType,
+        });
+
+        setImportProgress(60);
+
+        let dataToImport = fileData;
+        
+        // If parsing was successful and extracted structured data, use it
+        if (parseResult.ok && parseResult.payload.format === 'fet_json') {
+          dataToImport = parseResult.payload.data as Record<string, unknown>;
+          console.log('Using FET-parsed data:', parseResult.payload.parsed);
+        }
+        
+        // Call import-database with the data
+        const importResult = await invokeEdgeFunction('import-database', {
+          data: dataToImport,
+          importType,
         });
         
         setImportProgress(90);
         
-        if (error) {
-          throw error;
-        }
-        
-        if (result?.success) {
-          const playerCount = result.results?.players?.inserted || 0;
-          const teamCount = result.results?.teams?.inserted || 0;
-          const leagueCount = result.results?.leagues?.inserted || 0;
-          
-          // Refresh stats after import
-          await fetchDatabaseStats();
-          
-          // Show validation dialog
+        if (!importResult.ok) {
           setImportValidation({
             show: true,
-            success: true,
-            message: `Import completed successfully!`,
-            details: {
-              players: playerCount,
-              teams: teamCount,
-              leagues: leagueCount,
-              competitions: result.results?.competitions?.inserted || 0,
-            }
+            success: false,
+            message: (importResult.payload.error as string) || "Import failed",
+            hint: importResult.payload.hint as string | undefined,
+            nextSteps: importResult.payload.nextSteps as string[] | undefined,
+            details: { players: 0, teams: 0, leagues: 0, competitions: 0 }
           });
-        } else {
-          throw new Error(result?.error || "Import failed");
+          setImportDialogOpen(false);
+          setSelectedFile(null);
+          return;
         }
+        
+        const results = importResult.payload.results as Record<string, { inserted?: number }> | undefined;
+        const playerCount = results?.players?.inserted || 0;
+        const teamCount = results?.teams?.inserted || 0;
+        const leagueCount = results?.leagues?.inserted || 0;
+        
+        // Refresh stats after import
+        await fetchDatabaseStats();
+        
+        // Show validation dialog
+        setImportValidation({
+          show: true,
+          success: true,
+          message: `Import completed successfully!`,
+          details: {
+            players: playerCount,
+            teams: teamCount,
+            leagues: leagueCount,
+            competitions: results?.competitions?.inserted || 0,
+          }
+        });
       } else {
         // Binary squad file - attempt to parse via edge function
         setImportProgress(20);
@@ -247,25 +317,58 @@ export default function DatabasePage() {
         setImportProgress(40);
         
         // Call edge function to parse binary file
-        const { data: result, error } = await supabase.functions.invoke('parse-squad-file', {
-          body: { 
-            fileData: base64, 
-            fileName: selectedFile.name,
-            importType 
-          },
+        const parseResult = await invokeEdgeFunction('parse-squad-file', {
+          fileData: base64,
+          fileName: selectedFile.name,
+          importType,
         });
         
-        setImportProgress(90);
+        setImportProgress(60);
         
-        if (error) {
-          throw error;
+        if (!parseResult.ok) {
+          // Show user-friendly error dialog with hint and next steps
+          const payload = parseResult.payload;
+          setImportValidation({
+            show: true,
+            success: false,
+            message: (payload.error as string) || "File parsing failed",
+            hint: payload.hint as string | undefined,
+            nextSteps: payload.nextSteps as string[] | undefined,
+            details: { players: 0, teams: 0, leagues: 0, competitions: 0 }
+          });
+          setImportDialogOpen(false);
+          setSelectedFile(null);
+          return;
         }
         
-        if (result?.success) {
-          const playerCount = result.results?.players?.inserted || 0;
-          const teamCount = result.results?.teams?.inserted || 0;
-          const leagueCount = result.results?.leagues?.inserted || 0;
-          const competitionCount = result.results?.competitions?.inserted || 0;
+        // If we got parsed data, import it
+        if (parseResult.payload.success && parseResult.payload.data) {
+          const importResult = await invokeEdgeFunction('import-database', {
+            data: parseResult.payload.data,
+            importType,
+          });
+          
+          setImportProgress(90);
+          
+          if (!importResult.ok) {
+            setImportValidation({
+              show: true,
+              success: false,
+              message: (importResult.payload.error as string) || "Import failed",
+              hint: importResult.payload.hint as string | undefined,
+              nextSteps: importResult.payload.nextSteps as string[] | undefined,
+              details: { players: 0, teams: 0, leagues: 0, competitions: 0 }
+            });
+            setImportDialogOpen(false);
+            setSelectedFile(null);
+            return;
+          }
+          
+          const results = importResult.payload.results as Record<string, { inserted?: number }> | undefined;
+          const playerCount = results?.players?.inserted || 0;
+          const teamCount = results?.teams?.inserted || 0;
+          const leagueCount = results?.leagues?.inserted || 0;
+          const competitionCount = results?.competitions?.inserted || 0;
           
           // Refresh stats after import
           await fetchDatabaseStats();
@@ -274,7 +377,7 @@ export default function DatabasePage() {
           setImportValidation({
             show: true,
             success: true,
-            message: result.message || `Import completed successfully!`,
+            message: `Import completed successfully!`,
             details: {
               players: playerCount,
               teams: teamCount,
@@ -283,10 +386,18 @@ export default function DatabasePage() {
             }
           });
         } else {
-          // Check for specific format-related errors with recommendations
-          const errorMsg = result?.error || result?.hint || "Binary file parsing failed";
-          const recommendation = result?.recommendation || "";
-          throw new Error(recommendation ? `${errorMsg}\n\n${recommendation}` : errorMsg);
+          // Parsing returned success but no data - show as error
+          setImportValidation({
+            show: true,
+            success: false,
+            message: (parseResult.payload.error as string) || "No data found in file",
+            hint: parseResult.payload.hint as string | undefined,
+            nextSteps: parseResult.payload.nextSteps as string[] | undefined,
+            details: { players: 0, teams: 0, leagues: 0, competitions: 0 }
+          });
+          setImportDialogOpen(false);
+          setSelectedFile(null);
+          return;
         }
       }
       
@@ -991,28 +1102,34 @@ export default function DatabasePage() {
             
             {!importValidation?.success && (
               <div className="space-y-4">
-                <Alert className="bg-destructive/10 border-destructive/20">
-                  <AlertCircle className="h-4 w-4 text-destructive" />
-                  <AlertDescription className="text-sm whitespace-pre-wrap">
-                    {importValidation?.message?.includes('FBCHUNKS') || importValidation?.message?.includes('Frostbite') ? (
-                      <div className="space-y-3">
-                        <p><strong>Squad file format detected:</strong> Frostbite Engine (FBCHUNKS)</p>
-                        <p>This is a proprietary binary format used by EA's Frostbite engine. Direct parsing is not possible without specialized tools.</p>
-                        <div className="bg-muted/50 p-3 rounded-lg mt-2">
-                          <p className="font-medium mb-2">How to import your squad file:</p>
-                          <ol className="list-decimal list-inside space-y-1 text-xs">
-                            <li>Download and install <strong>FIFA Editor Tool (FET)</strong></li>
-                            <li>Open your squad file in FET</li>
-                            <li>Go to <strong>File → Export → JSON</strong></li>
-                            <li>Import the exported JSON file here</li>
-                          </ol>
-                        </div>
-                      </div>
-                    ) : (
-                      <>Please check your file format and try again. For best results, use FIFA Editor Tool (FET) to export your data to JSON format.</>
-                    )}
-                  </AlertDescription>
-                </Alert>
+                {importValidation?.hint && (
+                  <Alert className="bg-muted/50 border-border">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription className="text-sm">
+                      {importValidation.hint}
+                    </AlertDescription>
+                  </Alert>
+                )}
+                
+                {importValidation?.nextSteps && importValidation.nextSteps.length > 0 && (
+                  <div className="bg-muted/50 p-4 rounded-lg">
+                    <p className="font-medium mb-2">How to proceed:</p>
+                    <ol className="list-decimal list-inside space-y-2 text-sm">
+                      {importValidation.nextSteps.map((step, index) => (
+                        <li key={index}>{step}</li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+                
+                {!importValidation?.hint && !importValidation?.nextSteps && (
+                  <Alert className="bg-destructive/10 border-destructive/20">
+                    <AlertCircle className="h-4 w-4 text-destructive" />
+                    <AlertDescription className="text-sm">
+                      Please check your file format and try again. For best results, use FIFA Editor Tool (FET) to export your data to JSON format.
+                    </AlertDescription>
+                  </Alert>
+                )}
               </div>
             )}
             
