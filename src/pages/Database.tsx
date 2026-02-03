@@ -208,26 +208,12 @@ export default function DatabasePage() {
     setImportProgress(10);
 
     try {
-      const fileName = selectedFile.name.toLowerCase();
-      
       if (fileFormat === "json") {
-        // JSON file (FET export format)
-        if (!fileName.endsWith('.json')) {
-          toast({
-            title: "Invalid File Type",
-            description: "Please select a JSON file for FET export format.",
-            variant: "destructive",
-          });
-          setIsLoading(false);
-          setImportProgress(0);
-          return;
-        }
-        
+        // FET JSON export format - try to parse as JSON regardless of extension
+        // FET exports often don't have .json extension
         setImportProgress(20);
-        const fileData = await parseJsonFile(selectedFile);
-        setImportProgress(30);
-
-        // First, try to parse with parse-squad-file to extract structured data
+        
+        // Read file as base64 for edge function
         const arrayBuffer = await selectedFile.arrayBuffer();
         const uint8Array = new Uint8Array(arrayBuffer);
         const chunkSize = 8192;
@@ -240,7 +226,7 @@ export default function DatabasePage() {
 
         setImportProgress(40);
         
-        // Parse the JSON via edge function
+        // Parse via edge function - it will detect JSON vs binary
         const parseResult = await invokeEdgeFunction('parse-squad-file', {
           fileData: base64,
           fileName: selectedFile.name,
@@ -249,12 +235,44 @@ export default function DatabasePage() {
 
         setImportProgress(60);
 
-        let dataToImport = fileData;
+        // If edge function returned an error (not JSON, binary format, etc.)
+        if (!parseResult.ok) {
+          const payload = parseResult.payload;
+          setImportValidation({
+            show: true,
+            success: false,
+            message: (payload.error as string) || "File parsing failed",
+            hint: (payload.hint as string) || "The file does not appear to be a valid JSON export. FET exports should be in JSON format.",
+            nextSteps: payload.nextSteps as string[] | undefined,
+            details: { players: 0, teams: 0, leagues: 0, competitions: 0 }
+          });
+          setImportDialogOpen(false);
+          setSelectedFile(null);
+          return;
+        }
+
+        let dataToImport: Record<string, unknown>;
         
         // If parsing was successful and extracted structured data, use it
-        if (parseResult.ok && parseResult.payload.format === 'fet_json') {
+        if (parseResult.payload.format === 'fet_json') {
           dataToImport = parseResult.payload.data as Record<string, unknown>;
           console.log('Using FET-parsed data:', parseResult.payload.parsed);
+        } else if (parseResult.payload.format === 'json') {
+          // Raw JSON data
+          dataToImport = parseResult.payload.data as Record<string, unknown>;
+          console.log('Using raw JSON data');
+        } else {
+          // Unexpected format
+          setImportValidation({
+            show: true,
+            success: false,
+            message: "Unexpected file format",
+            hint: "The file was parsed but returned an unexpected format.",
+            details: { players: 0, teams: 0, leagues: 0, competitions: 0 }
+          });
+          setImportDialogOpen(false);
+          setSelectedFile(null);
+          return;
         }
         
         // Call import-database with the data
