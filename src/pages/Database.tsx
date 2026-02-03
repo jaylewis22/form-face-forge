@@ -51,6 +51,12 @@ export default function DatabasePage() {
     message: string;
     hint?: string;
     nextSteps?: string[];
+    format?: string;
+    fileInfo?: {
+      size?: number;
+      sizeFormatted?: string;
+      header?: string;
+    };
     details: {
       players: number;
       teams: number;
@@ -179,21 +185,72 @@ export default function DatabasePage() {
     const { data, error } = await supabase.functions.invoke(functionName, { body });
 
     if (error) {
-      // supabase-js typically provides the body text in error.context
-      const raw = (error as Record<string, unknown>)?.context as Record<string, unknown> | undefined;
-      const rawBody = raw?.body;
-
+      console.log('Edge function error object:', error);
+      console.log('Error keys:', Object.keys(error));
+      
+      // supabase-js provides error details in different ways depending on version
+      // Try multiple extraction methods
       let payload: Record<string, unknown> | null = null;
-      try { 
-        payload = typeof rawBody === "string" ? JSON.parse(rawBody) : rawBody as Record<string, unknown>; 
-      } catch {
-        // If JSON parsing fails, just use error message
+      let status = 415;
+      
+      // Method 1: Check error.context (older supabase-js)
+      const errorAny = error as Record<string, unknown>;
+      const context = errorAny?.context as Record<string, unknown> | undefined;
+      
+      if (context?.body) {
+        try { 
+          payload = typeof context.body === "string" ? JSON.parse(context.body) : context.body as Record<string, unknown>; 
+          status = (context.status as number) ?? 415;
+        } catch {
+          // Continue to next method
+        }
       }
+      
+      // Method 2: Error message might contain the JSON body (newer supabase-js)
+      if (!payload && error.message) {
+        // Try to extract JSON from error message like "Edge Function returned a non-2xx status code: {...}"
+        const jsonMatch = error.message.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          try {
+            payload = JSON.parse(jsonMatch[0]);
+          } catch {
+            // Continue to next method
+          }
+        }
+      }
+      
+      // Method 3: Check if error itself has our fields (FunctionsHttpError)
+      if (!payload) {
+        // The error might have a 'context' with 'json' method or direct properties
+        if (typeof errorAny.json === 'function') {
+          try {
+            payload = await (errorAny.json as () => Promise<Record<string, unknown>>)();
+          } catch {
+            // Continue
+          }
+        }
+      }
+      
+      // Method 4: Look for data even when there's an error (some edge function errors return both)
+      if (!payload && data) {
+        payload = data as Record<string, unknown>;
+      }
+      
+      console.log('Extracted payload:', payload);
 
       return {
         ok: false,
-        status: (raw?.status as number) ?? 415,
+        status,
         payload: payload ?? { success: false, error: error.message },
+      };
+    }
+
+    // Check if data indicates an error (some edge functions return errors in data with success: false)
+    if (data && typeof data === 'object' && 'success' in data && data.success === false) {
+      return {
+        ok: false,
+        status: 200, // Edge function returned 200 but with error payload
+        payload: data as Record<string, unknown>,
       };
     }
 
@@ -238,12 +295,15 @@ export default function DatabasePage() {
         // If edge function returned an error (not JSON, binary format, etc.)
         if (!parseResult.ok) {
           const payload = parseResult.payload;
+          const fileInfoData = payload.fileInfo as { size?: number; sizeFormatted?: string; header?: string } | undefined;
           setImportValidation({
             show: true,
             success: false,
             message: (payload.error as string) || "File parsing failed",
             hint: (payload.hint as string) || "The file does not appear to be a valid JSON export. FET exports should be in JSON format.",
             nextSteps: payload.nextSteps as string[] | undefined,
+            format: payload.format as string | undefined,
+            fileInfo: fileInfoData,
             details: { players: 0, teams: 0, leagues: 0, competitions: 0 }
           });
           setImportDialogOpen(false);
@@ -346,12 +406,15 @@ export default function DatabasePage() {
         if (!parseResult.ok) {
           // Show user-friendly error dialog with hint and next steps
           const payload = parseResult.payload;
+          const fileInfoData = payload.fileInfo as { size?: number; sizeFormatted?: string; header?: string } | undefined;
           setImportValidation({
             show: true,
             success: false,
             message: (payload.error as string) || "File parsing failed",
             hint: payload.hint as string | undefined,
             nextSteps: payload.nextSteps as string[] | undefined,
+            format: payload.format as string | undefined,
+            fileInfo: fileInfoData,
             details: { players: 0, teams: 0, leagues: 0, competitions: 0 }
           });
           setImportDialogOpen(false);
@@ -1120,6 +1183,20 @@ export default function DatabasePage() {
             
             {!importValidation?.success && (
               <div className="space-y-4">
+                {/* Format badge */}
+                {importValidation?.format && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-mono px-2 py-1 rounded bg-muted border border-border">
+                      {importValidation.format.toUpperCase()}
+                    </span>
+                    {importValidation.fileInfo?.sizeFormatted && (
+                      <span className="text-xs text-muted-foreground">
+                        {importValidation.fileInfo.sizeFormatted}
+                      </span>
+                    )}
+                  </div>
+                )}
+                
                 {importValidation?.hint && (
                   <Alert className="bg-muted/50 border-border">
                     <AlertCircle className="h-4 w-4" />
@@ -1137,6 +1214,21 @@ export default function DatabasePage() {
                         <li key={index}>{step}</li>
                       ))}
                     </ol>
+                  </div>
+                )}
+                
+                {/* FET Download Link */}
+                {importValidation?.format === 'fbchunks' && (
+                  <div className="flex items-center gap-2 pt-2">
+                    <a 
+                      href="https://github.com/xAranaktu/FIFA-Editor-Tool/releases" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-sm text-primary hover:underline flex items-center gap-1"
+                    >
+                      <FileDown className="h-3 w-3" />
+                      Download FIFA Editor Tool (FET)
+                    </a>
                   </div>
                 )}
                 
