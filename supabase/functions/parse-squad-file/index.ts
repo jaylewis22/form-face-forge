@@ -626,11 +626,15 @@ Deno.serve(async (req) => {
             sizeFormatted: `${(bytes.length / 1024 / 1024).toFixed(2)} MB`,
             header: headerHex,
           },
-          recommendation: "Please use FIFA Editor Tool (FET) to open this squad file and export to JSON format. FET can properly decode the Frostbite engine data structures and provide accurate player, team, and league information.",
+          nextSteps: [
+            "Open the squad file in FIFA Editor Tool (FET).",
+            "Export/Convert the squad to JSON format.",
+            "Upload the JSON export to import players, teams, and leagues.",
+          ],
         }),
         {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
-          status: 400,
+          status: 415,
         },
       );
     }
@@ -721,7 +725,11 @@ Deno.serve(async (req) => {
           sizeFormatted: `${(bytes.length / 1024 / 1024).toFixed(2)} MB`,
           header: headerHex,
         },
-        recommendation: "Please use FIFA Editor Tool (FET) to open this squad file and export to JSON format.",
+        nextSteps: [
+          "If this is a FIFA/FC squad file, open it in FIFA Editor Tool (FET).",
+          "Export the data to JSON format.",
+          "Upload the JSON export for accurate parsing.",
+        ],
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
