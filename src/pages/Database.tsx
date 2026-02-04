@@ -44,6 +44,7 @@ import {
   clearPlayerNameMap,
   type PlayerNameMap 
 } from "@/lib/playerNameMapping";
+import { parseSqliteFile, detectSqlite } from "@/lib/sqliteNameParser";
 
 export default function DatabasePage() {
   const { toast } = useToast();
@@ -628,8 +629,24 @@ export default function DatabasePage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    setIsLoading(true);
+    
     try {
-      const result = await loadPlayerNamesFromFile(file);
+      let result: PlayerNameMap;
+      
+      // Check if it's an SQLite file
+      const isSqlite = await detectSqlite(file);
+      
+      if (isSqlite) {
+        toast({
+          title: "Parsing SQLite Database",
+          description: "Loading player names from SQLite file...",
+        });
+        result = await parseSqliteFile(file);
+      } else {
+        // Use existing text-based parser
+        result = await loadPlayerNamesFromFile(file);
+      }
       
       if (result.totalEntries === 0) {
         toast({
@@ -655,6 +672,8 @@ export default function DatabasePage() {
         description: error instanceof Error ? error.message : "Failed to load player names file",
         variant: "destructive",
       });
+    } finally {
+      setIsLoading(false);
     }
 
     // Reset input
@@ -892,26 +911,28 @@ export default function DatabasePage() {
                     <div className="border-2 border-dashed border-border/50 rounded-lg p-6 text-center">
                       <Upload className="w-6 h-6 mx-auto mb-2 text-muted-foreground" />
                       <p className="text-sm text-muted-foreground mb-2">
-                        Upload players.txt or a JSON file with player names
+                        Upload players.txt, JSON, or compdata_local.sqlite
                       </p>
                       <Button 
                         variant="outline" 
                         size="sm"
                         onClick={() => nameFileInputRef.current?.click()}
+                        disabled={isLoading}
                       >
+                        {isLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
                         Load Names File
                       </Button>
                     </div>
                   </div>
                 )}
                 <p className="text-xs text-muted-foreground">
-                  Supports: players.txt (FET export), JSON files with playerid/name fields
+                  Supports: players.txt, JSON, CSV, or SQLite (.sqlite, .db) database files
                 </p>
                 <input
                   type="file"
                   ref={nameFileInputRef}
                   className="hidden"
-                  accept=".txt,.json,.csv"
+                  accept=".txt,.json,.csv,.sqlite,.db,.sqlite3"
                   onChange={handlePlayerNamesFileChange}
                 />
               </CardContent>
