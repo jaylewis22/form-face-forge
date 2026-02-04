@@ -35,7 +35,8 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { parseSquadFile, mapPlayerToDatabase } from "@/lib/fbchunksParser";
+import { parseSquadFile, mapPlayerToDatabase, detectFBCHUNKS, type ParseProgress } from "@/lib/fbchunksParser";
+import { ImportProgress, type ImportStage } from "@/components/Import/ImportProgress";
 
 export default function DatabasePage() {
   const { toast } = useToast();
@@ -46,6 +47,13 @@ export default function DatabasePage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
+  const [detectedFormat, setDetectedFormat] = useState<"json" | "fbchunks" | null>(null);
+  const [importStages, setImportStages] = useState<ImportStage[]>([]);
+  const [parseStats, setParseStats] = useState<{
+    totalChunks: number;
+    processedChunks: number;
+    playersFound: number;
+  } | null>(null);
   const [fileFormat, setFileFormat] = useState<"json" | "binary">("json");
   const [importValidation, setImportValidation] = useState<{
     show: boolean;
@@ -116,7 +124,7 @@ export default function DatabasePage() {
     setImportDialogOpen(true);
   };
 
-  const handleFileSelect = (file: File) => {
+  const handleFileSelect = async (file: File) => {
     // Accept JSON for FET exports, plus various binary files
     const fileName = file.name.toLowerCase();
     const validExtensions = ['.json', '.csv', '.sql', '.xml', '.bin', '.db', '.dat', '.sav', '.bak'];
@@ -142,6 +150,20 @@ export default function DatabasePage() {
         variant: "destructive",
       });
       return;
+    }
+    
+    // Auto-detect FBCHUNKS format
+    const isFbchunks = await detectFBCHUNKS(file);
+    if (isFbchunks) {
+      setDetectedFormat("fbchunks");
+      setFileFormat("binary");
+      toast({
+        title: "FBCHUNKS Detected",
+        description: "Binary squad file detected. Ready for direct import.",
+      });
+    } else {
+      setDetectedFormat("json");
+      setFileFormat("json");
     }
     
     setSelectedFile(file);
@@ -265,6 +287,26 @@ export default function DatabasePage() {
     
     setIsLoading(true);
     setImportProgress(10);
+    setParseStats(null);
+    
+    // Initialize stages based on format
+    const isDetectedFbchunks = detectedFormat === "fbchunks" || fileFormat === "binary";
+    
+    if (isDetectedFbchunks) {
+      setImportStages([
+        { id: "read", label: "Reading file", status: "pending" },
+        { id: "scan", label: "Scanning chunks", status: "pending" },
+        { id: "parse", label: "Parsing player records", status: "pending" },
+        { id: "map", label: "Mapping to database schema", status: "pending" },
+        { id: "import", label: "Importing to database", status: "pending" },
+      ]);
+    } else {
+      setImportStages([
+        { id: "read", label: "Reading file", status: "pending" },
+        { id: "parse", label: "Parsing JSON data", status: "pending" },
+        { id: "import", label: "Importing to database", status: "pending" },
+      ]);
+    }
 
     try {
       if (fileFormat === "json") {
@@ -381,14 +423,47 @@ export default function DatabasePage() {
         });
       } else {
         // Binary squad file - parse client-side using FBCHUNKS parser
-        setImportProgress(20);
+        setImportStages(prev => prev.map(s => 
+          s.id === "read" ? { ...s, status: "active" as const, detail: "Reading binary file..." } : s
+        ));
+        setImportProgress(15);
         
         console.log('[Import] Starting client-side FBCHUNKS parsing...');
         
-        // Parse directly in browser
-        const parseResult = await parseSquadFile(selectedFile);
+        // Progress callback handler
+        const handleParseProgress = (progress: ParseProgress) => {
+          setImportProgress(progress.progress);
+          setParseStats({
+            totalChunks: progress.totalChunks,
+            processedChunks: progress.processedChunks,
+            playersFound: progress.playersFound,
+          });
+          
+          // Update stages based on parse progress
+          setImportStages(prev => prev.map(s => {
+            if (s.id === "read" && progress.stage !== "reading") {
+              return { ...s, status: "complete" as const };
+            }
+            if (s.id === "scan") {
+              if (progress.stage === "scanning") {
+                return { ...s, status: "active" as const, detail: progress.detail };
+              } else if (["parsing", "extracting", "complete"].includes(progress.stage)) {
+                return { ...s, status: "complete" as const, detail: `${progress.totalChunks} chunks found` };
+              }
+            }
+            if (s.id === "parse") {
+              if (progress.stage === "parsing" || progress.stage === "extracting") {
+                return { ...s, status: "active" as const, detail: progress.detail };
+              } else if (progress.stage === "complete") {
+                return { ...s, status: "complete" as const, detail: `${progress.playersFound} players extracted` };
+              }
+            }
+            return s;
+          }));
+        };
         
-        setImportProgress(50);
+        // Parse directly in browser with progress
+        const parseResult = await parseSquadFile(selectedFile, handleParseProgress);
         
         console.log(`[Import] Parsed ${parseResult.players.length} players from ${parseResult.mediumChunks} MEDIUM chunks`);
         
@@ -418,19 +493,23 @@ export default function DatabasePage() {
           return;
         }
         
-        setImportProgress(60);
+        // Update stage: mapping
+        setImportStages(prev => prev.map(s => 
+          s.id === "parse" ? { ...s, status: "complete" as const, detail: `${parseResult.players.length} players extracted` } :
+          s.id === "map" ? { ...s, status: "active" as const, detail: "Converting to database format..." } : s
+        ));
+        setImportProgress(65);
         
         // Map parsed players to database schema
         const mappedPlayers = parseResult.players.map(mapPlayerToDatabase);
         console.log(`[Import] Mapped ${mappedPlayers.length} players to database schema`);
         
-        // Show confirmation with parsed data before importing
-        toast({
-          title: `Parsed ${parseResult.players.length} players`,
-          description: `Found ${parseResult.totalChunks} chunks (${parseResult.mediumChunks} MEDIUM). Ready to import.`,
-        });
-        
-        setImportProgress(70);
+        // Update stage: import
+        setImportStages(prev => prev.map(s => 
+          s.id === "map" ? { ...s, status: "complete" as const, detail: `${mappedPlayers.length} players mapped` } :
+          s.id === "import" ? { ...s, status: "active" as const, detail: "Sending to database..." } : s
+        ));
+        setImportProgress(75);
         
         // Import to database
         const importResult = await invokeEdgeFunction('import-database', {
@@ -438,7 +517,7 @@ export default function DatabasePage() {
           importType,
         });
         
-        setImportProgress(90);
+        setImportProgress(95);
         
         if (!importResult.ok) {
           setImportValidation({
@@ -455,6 +534,9 @@ export default function DatabasePage() {
         
         const results = importResult.payload.results as Record<string, { inserted?: number }> | undefined;
         const playerCount = results?.players?.inserted || parseResult.players.length;
+        
+        // Update stages complete
+        setImportStages(prev => prev.map(s => ({ ...s, status: "complete" as const })));
         
         // Refresh stats after import
         await fetchDatabaseStats();
@@ -481,6 +563,9 @@ export default function DatabasePage() {
         setImportProgress(100);
         setImportDialogOpen(false);
         setSelectedFile(null);
+        setDetectedFormat(null);
+        setImportStages([]);
+        setParseStats(null);
         return;
       }
       
@@ -971,7 +1056,12 @@ export default function DatabasePage() {
         <Dialog open={importDialogOpen} onOpenChange={(open) => {
           if (!isLoading) {
             setImportDialogOpen(open);
-            if (!open) setSelectedFile(null);
+            if (!open) {
+              setSelectedFile(null);
+              setDetectedFormat(null);
+              setImportStages([]);
+              setParseStats(null);
+            }
           }
         }}>
           <DialogContent className="sm:max-w-md">
@@ -985,30 +1075,45 @@ export default function DatabasePage() {
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
-              <div className="space-y-3">
-                <Label>File Format</Label>
-                <RadioGroup 
-                  value={fileFormat} 
-                  onValueChange={(v) => setFileFormat(v as "json" | "binary")}
-                  disabled={isLoading}
-                  className="grid grid-cols-2 gap-4"
-                >
-                  <div className={`flex items-center space-x-2 p-3 border rounded-lg cursor-pointer transition-colors ${fileFormat === 'json' ? 'border-primary bg-primary/5' : 'border-border/50 hover:border-primary/30'}`}>
-                    <RadioGroupItem value="json" id="json" />
-                    <Label htmlFor="json" className="cursor-pointer flex-1">
-                      <span className="font-medium block">FET JSON Export</span>
-                      <span className="text-xs text-muted-foreground">Converted via FIFA Editor Tool</span>
-                    </Label>
+              {/* Only show format selection if not auto-detected */}
+              {!detectedFormat && (
+                <div className="space-y-3">
+                  <Label>File Format</Label>
+                  <RadioGroup 
+                    value={fileFormat} 
+                    onValueChange={(v) => setFileFormat(v as "json" | "binary")}
+                    disabled={isLoading}
+                    className="grid grid-cols-2 gap-4"
+                  >
+                    <div className={`flex items-center space-x-2 p-3 border rounded-lg cursor-pointer transition-colors ${fileFormat === 'json' ? 'border-primary bg-primary/5' : 'border-border/50 hover:border-primary/30'}`}>
+                      <RadioGroupItem value="json" id="json" />
+                      <Label htmlFor="json" className="cursor-pointer flex-1">
+                        <span className="font-medium block">FET JSON Export</span>
+                        <span className="text-xs text-muted-foreground">Converted via FIFA Editor Tool</span>
+                      </Label>
+                    </div>
+                    <div className={`flex items-center space-x-2 p-3 border rounded-lg cursor-pointer transition-colors ${fileFormat === 'binary' ? 'border-primary bg-primary/5' : 'border-border/50 hover:border-primary/30'}`}>
+                      <RadioGroupItem value="binary" id="binary" />
+                      <Label htmlFor="binary" className="cursor-pointer flex-1">
+                        <span className="font-medium block">Binary Squad File</span>
+                        <span className="text-xs text-muted-foreground">Raw game files (.bin, etc)</span>
+                      </Label>
+                    </div>
+                  </RadioGroup>
+                </div>
+              )}
+              
+              {detectedFormat === "fbchunks" && (
+                <div className="p-3 bg-primary/10 rounded-lg border border-primary/20">
+                  <div className="flex items-center gap-2">
+                    <Cpu className="w-5 h-5 text-primary" />
+                    <div>
+                      <p className="font-medium text-sm">FBCHUNKS Format Detected</p>
+                      <p className="text-xs text-muted-foreground">Binary squad file will be parsed directly</p>
+                    </div>
                   </div>
-                  <div className={`flex items-center space-x-2 p-3 border rounded-lg cursor-pointer transition-colors ${fileFormat === 'binary' ? 'border-primary bg-primary/5' : 'border-border/50 hover:border-primary/30'}`}>
-                    <RadioGroupItem value="binary" id="binary" />
-                    <Label htmlFor="binary" className="cursor-pointer flex-1">
-                      <span className="font-medium block">Binary Squad File</span>
-                      <span className="text-xs text-muted-foreground">Raw game files (.bin, etc)</span>
-                    </Label>
-                  </div>
-                </RadioGroup>
-              </div>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label>Import Type</Label>
@@ -1080,28 +1185,49 @@ export default function DatabasePage() {
                 )}
               </div>
               
-              {isLoading && importProgress > 0 && (
+              {isLoading && importProgress > 0 && importStages.length > 0 ? (
+                <ImportProgress
+                  stages={importStages}
+                  currentProgress={importProgress}
+                  totalChunks={parseStats?.totalChunks}
+                  processedChunks={parseStats?.processedChunks}
+                  playersFound={parseStats?.playersFound}
+                />
+              ) : isLoading && importProgress > 0 ? (
                 <div className="space-y-2">
                   <Progress value={importProgress} className="h-2" />
                   <p className="text-xs text-muted-foreground text-center">
                     Importing... {importProgress}%
                   </p>
                 </div>
+              ) : null}
+              
+              {detectedFormat === "fbchunks" ? (
+                <Alert className="bg-primary/10 border-primary/20">
+                  <Cpu className="h-4 w-4 text-primary" />
+                  <AlertDescription className="text-xs">
+                    <strong>FBCHUNKS Detected!</strong> Binary squad file will be parsed directly in your browser. Player attributes will be extracted, but names use placeholder format (Player_ID) due to Oodle compression.
+                  </AlertDescription>
+                </Alert>
+              ) : (
+                <Alert className="bg-muted/50">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription className="text-xs">
+                    {fileFormat === "json" ? (
+                      <><strong>FET JSON:</strong> Use FIFA Editor Tool to export your database to JSON format. This provides the most complete and accurate data import.</>
+                    ) : (
+                      <><strong>Binary Files:</strong> Binary squad files (.bin, .db, .dat, FBCHUNKS) will be auto-detected and parsed directly.</>
+                    )}
+                  </AlertDescription>
+                </Alert>
               )}
               
-              <Alert className="bg-muted/50">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription className="text-xs">
-                  {fileFormat === "json" ? (
-                    <><strong>FET JSON:</strong> Use FIFA Editor Tool to export your database to JSON format. This provides the most complete and accurate data import.</>
-                  ) : (
-                    <><strong>Binary Files:</strong> Binary squad files (.bin, .db, .dat, FBCHUNKS) require conversion via FET for accurate import. Direct binary parsing is not currently supported due to EA's proprietary format.</>
-                  )}
-                </AlertDescription>
-              </Alert>
-              
               <p className="text-xs text-muted-foreground">
-                {fileFormat === "json" ? "Supported: .json files (Max 100MB)" : "Supported: .bin, .db, .dat, squad files (Max 100MB) - Requires FET conversion"}
+                {detectedFormat === "fbchunks" 
+                  ? `Binary FBCHUNKS file detected • ${selectedFile ? (selectedFile.size / 1024 / 1024).toFixed(2) + " MB" : ""}`
+                  : fileFormat === "json" 
+                    ? "Supported: .json files (Max 100MB)" 
+                    : "Supported: .bin, .db, .dat, squad files (Max 100MB)"}
               </p>
               
               <div className="flex gap-2 justify-end">
@@ -1110,6 +1236,9 @@ export default function DatabasePage() {
                   onClick={() => {
                     setImportDialogOpen(false);
                     setSelectedFile(null);
+                    setDetectedFormat(null);
+                    setImportStages([]);
+                    setParseStats(null);
                   }}
                   disabled={isLoading}
                 >
