@@ -71,6 +71,15 @@ interface Chunk {
   isCompressed?: boolean;
 }
 
+export interface ParseProgress {
+  stage: "reading" | "scanning" | "parsing" | "extracting" | "complete";
+  progress: number;
+  totalChunks: number;
+  processedChunks: number;
+  playersFound: number;
+  detail?: string;
+}
+
 export interface FBCHUNKSParseResult {
   success: boolean;
   format: string;
@@ -78,6 +87,16 @@ export interface FBCHUNKSParseResult {
   totalChunks: number;
   mediumChunks: number;
   error?: string;
+}
+
+/**
+ * Detect if a file is FBCHUNKS format by checking magic bytes
+ */
+export async function detectFBCHUNKS(file: File): Promise<boolean> {
+  const buffer = await file.slice(0, 16).arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  const magic = new TextDecoder().decode(bytes.slice(0, 8));
+  return magic === "FBCHUNKS";
 }
 
 // Player attribute offsets within 144-byte record
@@ -315,6 +334,13 @@ export class FBCHUNKSParser {
    * Main parse method
    */
   parse(): FBCHUNKSParseResult {
+    return this.parseWithProgress();
+  }
+
+  /**
+   * Parse with progress callback support
+   */
+  parseWithProgress(onProgress?: (progress: ParseProgress) => void): FBCHUNKSParseResult {
     if (!this.isValidFBCHUNKS()) {
       return {
         success: false,
@@ -326,24 +352,61 @@ export class FBCHUNKSParser {
       };
     }
 
+    onProgress?.({
+      stage: "scanning",
+      progress: 20,
+      totalChunks: 0,
+      processedChunks: 0,
+      playersFound: 0,
+      detail: "Parsing chunk directory...",
+    });
+
     const chunks = this.parseChunkDirectory();
     const mediumChunks = chunks.filter((c) => this.classifyChunk(c) === "MEDIUM");
+    const smallChunks = chunks.filter((c) => this.classifyChunk(c) === "SMALL");
+    const chunksToProcess = [...mediumChunks, ...smallChunks];
     const allPlayers: ParsedPlayer[] = [];
 
-    console.log(`[FBCHUNKSParser] Found ${chunks.length} chunks, ${mediumChunks.length} MEDIUM chunks`);
+    console.log(`[FBCHUNKSParser] Found ${chunks.length} chunks, ${mediumChunks.length} MEDIUM, ${smallChunks.length} SMALL`);
 
-    // Extract players from MEDIUM chunks
-    for (const chunk of mediumChunks) {
+    onProgress?.({
+      stage: "parsing",
+      progress: 30,
+      totalChunks: chunks.length,
+      processedChunks: 0,
+      playersFound: 0,
+      detail: `Found ${chunks.length} chunks (${mediumChunks.length} MEDIUM, ${smallChunks.length} SMALL)`,
+    });
+
+    // Extract players from MEDIUM and SMALL chunks
+    let processedCount = 0;
+    for (const chunk of chunksToProcess) {
       const players = this.extractPlayerRecords(chunk);
       allPlayers.push(...players);
+      processedCount++;
+
+      // Report progress every 10 chunks
+      if (processedCount % 10 === 0 || processedCount === chunksToProcess.length) {
+        const progressPct = 30 + Math.floor((processedCount / chunksToProcess.length) * 50);
+        onProgress?.({
+          stage: "extracting",
+          progress: progressPct,
+          totalChunks: chunks.length,
+          processedChunks: processedCount,
+          playersFound: allPlayers.length,
+          detail: `Processing chunk ${processedCount}/${chunksToProcess.length}...`,
+        });
+      }
     }
 
-    // Also try SMALL chunks as they may contain player data
-    const smallChunks = chunks.filter((c) => this.classifyChunk(c) === "SMALL");
-    for (const chunk of smallChunks) {
-      const players = this.extractPlayerRecords(chunk);
-      allPlayers.push(...players);
-    }
+    onProgress?.({
+      stage: "extracting",
+      progress: 85,
+      totalChunks: chunks.length,
+      processedChunks: chunksToProcess.length,
+      playersFound: allPlayers.length,
+      detail: "Deduplicating player records...",
+    });
 
     // Deduplicate by playerid
     const uniquePlayers = new Map<number, ParsedPlayer>();
@@ -356,6 +419,15 @@ export class FBCHUNKSParser {
     const players = Array.from(uniquePlayers.values());
     console.log(`[FBCHUNKSParser] Extracted ${players.length} unique players`);
 
+    onProgress?.({
+      stage: "complete",
+      progress: 100,
+      totalChunks: chunks.length,
+      processedChunks: chunksToProcess.length,
+      playersFound: players.length,
+      detail: `Extracted ${players.length} unique players`,
+    });
+
     return {
       success: players.length > 0,
       format: "fbchunks",
@@ -367,12 +439,35 @@ export class FBCHUNKSParser {
 }
 
 /**
- * Parse a File object as FBCHUNKS
+ * Parse a File object as FBCHUNKS with progress callback
  */
-export async function parseSquadFile(file: File): Promise<FBCHUNKSParseResult> {
+export async function parseSquadFile(
+  file: File,
+  onProgress?: (progress: ParseProgress) => void
+): Promise<FBCHUNKSParseResult> {
+  // Report initial stage
+  onProgress?.({
+    stage: "reading",
+    progress: 5,
+    totalChunks: 0,
+    processedChunks: 0,
+    playersFound: 0,
+    detail: "Reading file...",
+  });
+
   const buffer = await file.arrayBuffer();
+  
+  onProgress?.({
+    stage: "scanning",
+    progress: 15,
+    totalChunks: 0,
+    processedChunks: 0,
+    playersFound: 0,
+    detail: "Scanning for chunks...",
+  });
+
   const parser = new FBCHUNKSParser(buffer);
-  return parser.parse();
+  return parser.parseWithProgress(onProgress);
 }
 
 /**
