@@ -130,6 +130,12 @@ function formatPlayerForCard(player: Player) {
     dribbling: player.dribbling || 0,
     defending: player.defending || 0,
     physical: player.physical || 0,
+    // GK attributes
+    gk_diving: player.gk_diving || undefined,
+    gk_handling: player.gk_handling || undefined,
+    gk_kicking: player.gk_kicking || undefined,
+    gk_positioning: player.gk_positioning || undefined,
+    gk_reflexes: player.gk_reflexes || undefined,
   };
 }
 
