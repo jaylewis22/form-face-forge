@@ -45,6 +45,7 @@ import {
   type PlayerNameMap 
 } from "@/lib/playerNameMapping";
 import { parseSqliteFile, detectSqlite } from "@/lib/sqliteNameParser";
+import { ApplyNameMapping } from "@/components/Player/ApplyNameMapping";
 
 export default function DatabasePage() {
   const { toast } = useToast();
@@ -937,6 +938,9 @@ export default function DatabasePage() {
                 />
               </CardContent>
             </Card>
+
+            {/* Apply Name Mapping to Database */}
+            <ApplyNameMapping />
           </TabsContent>
 
           <TabsContent value="backup" className="space-y-4">
