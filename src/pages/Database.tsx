@@ -37,6 +37,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { parseSquadFile, mapPlayerToDatabase, detectFBCHUNKS, type ParseProgress } from "@/lib/fbchunksParser";
 import { ImportProgress, type ImportStage } from "@/components/Import/ImportProgress";
+import { 
+  loadPlayerNamesFromFile, 
+  loadPlayerNameMap, 
+  savePlayerNameMap, 
+  clearPlayerNameMap,
+  type PlayerNameMap 
+} from "@/lib/playerNameMapping";
 
 export default function DatabasePage() {
   const { toast } = useToast();
@@ -82,6 +89,16 @@ export default function DatabasePage() {
     totalSize: 0,
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const nameFileInputRef = useRef<HTMLInputElement>(null);
+  const [playerNameMap, setPlayerNameMap] = useState<PlayerNameMap | null>(null);
+
+  // Load stored name mapping on mount
+  useEffect(() => {
+    const stored = loadPlayerNameMap();
+    if (stored) {
+      setPlayerNameMap(stored);
+    }
+  }, []);
 
   // Fetch database stats on mount
   useEffect(() => {
@@ -500,9 +517,11 @@ export default function DatabasePage() {
         ));
         setImportProgress(65);
         
-        // Map parsed players to database schema
-        const mappedPlayers = parseResult.players.map(mapPlayerToDatabase);
-        console.log(`[Import] Mapped ${mappedPlayers.length} players to database schema`);
+        // Map parsed players to database schema with name mapping
+        const mappedPlayers = parseResult.players.map(p => mapPlayerToDatabase(p, playerNameMap || undefined));
+        const namedCount = playerNameMap ? mappedPlayers.filter(p => !String(p.name).startsWith('Player_')).length : 0;
+        console.log(`[Import] Mapped ${mappedPlayers.length} players to database schema (${namedCount} with real names)`);
+        
         
         // Update stage: import
         setImportStages(prev => prev.map(s => 
@@ -602,6 +621,55 @@ export default function DatabasePage() {
         description: "Database backup created successfully.",
       });
     }, 2000);
+  };
+
+  // Handle player names file upload
+  const handlePlayerNamesFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const result = await loadPlayerNamesFromFile(file);
+      
+      if (result.totalEntries === 0) {
+        toast({
+          title: "No Names Found",
+          description: "Could not parse any player names from the file. Make sure it has playerid and name columns.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Save to localStorage and state
+      savePlayerNameMap(result);
+      setPlayerNameMap(result);
+
+      toast({
+        title: "Player Names Loaded",
+        description: `Loaded ${result.totalEntries.toLocaleString()} player names from ${file.name}`,
+      });
+    } catch (error) {
+      console.error("Error loading player names:", error);
+      toast({
+        title: "Error Loading Names",
+        description: error instanceof Error ? error.message : "Failed to load player names file",
+        variant: "destructive",
+      });
+    }
+
+    // Reset input
+    if (nameFileInputRef.current) {
+      nameFileInputRef.current.value = '';
+    }
+  };
+
+  const handleClearPlayerNames = () => {
+    clearPlayerNameMap();
+    setPlayerNameMap(null);
+    toast({
+      title: "Names Cleared",
+      description: "Player name mapping has been removed.",
+    });
   };
 
   const handleOptimize = () => {
@@ -776,6 +844,78 @@ export default function DatabasePage() {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Player Name Mapping Card */}
+            <Card className="bg-card/50 border-border/50">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Settings className="w-5 h-5" />
+                  Player Name Mapping
+                </CardTitle>
+                <CardDescription>
+                  Load a reference file to map player IDs to real names when importing binary squad files
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {playerNameMap ? (
+                  <div className="space-y-3">
+                    <Alert className="border-primary/30 bg-primary/5">
+                      <CheckCircle className="h-4 w-4 text-primary" />
+                      <AlertDescription>
+                        <strong>{playerNameMap.totalEntries.toLocaleString()}</strong> player names loaded from {playerNameMap.source}
+                      </AlertDescription>
+                    </Alert>
+                    <div className="flex gap-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => nameFileInputRef.current?.click()}
+                      >
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                        Replace
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={handleClearPlayerNames}
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Clear
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-sm text-muted-foreground">
+                      No player names loaded. Binary imports will use placeholder names (Player_ID).
+                    </p>
+                    <div className="border-2 border-dashed border-border/50 rounded-lg p-6 text-center">
+                      <Upload className="w-6 h-6 mx-auto mb-2 text-muted-foreground" />
+                      <p className="text-sm text-muted-foreground mb-2">
+                        Upload players.txt or a JSON file with player names
+                      </p>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => nameFileInputRef.current?.click()}
+                      >
+                        Load Names File
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Supports: players.txt (FET export), JSON files with playerid/name fields
+                </p>
+                <input
+                  type="file"
+                  ref={nameFileInputRef}
+                  className="hidden"
+                  accept=".txt,.json,.csv"
+                  onChange={handlePlayerNamesFileChange}
+                />
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="backup" className="space-y-4">
