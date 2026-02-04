@@ -184,111 +184,65 @@ export class FBCHUNKSParser {
   }
 
   /**
-   * Parse chunk directory - scan header for chunk table location
+   * Parse chunk directory at offset 0x1530 (documented structure)
+   * Directory has 489 entries × 16 bytes = 8,320 bytes
    */
   private parseChunkDirectory(): Chunk[] {
     const chunks: Chunk[] = [];
     
-    // FBCHUNKS header structure:
-    // 0x00-0x07: "FBCHUNKS" magic
-    // 0x08-0x0B: Version/flags
-    // 0x0C-0x0F: Total file size or chunk count
-    // 0x10+: Variable header data, chunk directory location varies
+    // FBCHUNKS documented structure:
+    // 0x00-0x08:     "FBCHUNKS" magic
+    // 0x08-0x54:     Header metadata (76 bytes)
+    // 0x54-0x1530:   Enc1 tag block (5,336 bytes)
+    // 0x1530-0x35B0: Primary directory (489 entries × 16 bytes)
     
-    // Try to find chunk count from header
-    let chunkCount = 0;
-    let dirOffset = 0;
+    const DIR_OFFSET = 0x1530;
+    const DIR_END = 0x35B0;
+    const ENTRY_SIZE = 16;
+    const MAX_ENTRIES = 489;
     
-    // Method 1: Check common header positions for chunk count
-    if (this.buffer.byteLength >= 0x20) {
-      // Try offset 0x0C (common location for count)
-      const potentialCount1 = this.view.getUint32(0x0C, true);
-      // Try offset 0x10
-      const potentialCount2 = this.view.getUint32(0x10, true);
-      // Try offset 0x14
-      const potentialCount3 = this.view.getUint32(0x14, true);
-      
-      // Use reasonable count (1-1000 chunks expected)
-      if (potentialCount1 > 0 && potentialCount1 < 1000) {
-        chunkCount = potentialCount1;
-        dirOffset = 0x18; // Directory likely starts after this
-      } else if (potentialCount2 > 0 && potentialCount2 < 1000) {
-        chunkCount = potentialCount2;
-        dirOffset = 0x20;
-      } else if (potentialCount3 > 0 && potentialCount3 < 1000) {
-        chunkCount = potentialCount3;
-        dirOffset = 0x20;
-      }
-    }
+    console.log(`[FBCHUNKSParser] Parsing directory at 0x${DIR_OFFSET.toString(16)}, file size: ${this.buffer.byteLength}`);
     
-    console.log(`[FBCHUNKSParser] Header analysis: potentialChunkCount=${chunkCount}, dirOffset=0x${dirOffset.toString(16)}`);
-    
-    // Method 2: Scan for chunk directory by looking for valid offset patterns
-    // Chunk entries typically have: [flags, offset, uncompressed_size, compressed_size]
-    if (chunkCount === 0 || dirOffset === 0) {
-      // Scan the first 32KB for directory-like patterns
-      const SCAN_LIMIT = Math.min(0x8000, this.buffer.byteLength);
-      const ENTRY_SIZE = 16;
-      
-      for (let pos = 0x10; pos < SCAN_LIMIT - ENTRY_SIZE * 10; pos += 4) {
-        // Check if this looks like a chunk directory start
-        let validEntries = 0;
-        for (let i = 0; i < 10 && pos + (i + 1) * ENTRY_SIZE <= this.buffer.byteLength; i++) {
-          const entryPos = pos + i * ENTRY_SIZE;
-          const offset = this.view.getUint32(entryPos + 4, true);
-          const size = this.view.getUint32(entryPos + 8, true);
-          
-          // Valid chunk: offset > header, size reasonable, within file bounds
-          if (offset >= 0x1000 && offset < this.buffer.byteLength && 
-              size > 0 && size < 0x100000 && offset + size <= this.buffer.byteLength) {
-            validEntries++;
-          }
-        }
-        
-        if (validEntries >= 5) {
-          dirOffset = pos;
-          console.log(`[FBCHUNKSParser] Found likely chunk directory at 0x${pos.toString(16)} (${validEntries} valid entries)`);
-          break;
-        }
-      }
-    }
-    
-    // If still no directory found, fall back to original fixed offset
-    if (dirOffset === 0) {
-      dirOffset = 0x1530;
-      console.log(`[FBCHUNKSParser] Using fallback directory offset 0x${dirOffset.toString(16)}`);
+    // Verify we have enough data for the directory
+    if (this.buffer.byteLength < DIR_END) {
+      console.log(`[FBCHUNKSParser] File too small for standard directory, using pattern scanning`);
+      return this.scanForPlayerData();
     }
     
     // Parse chunk directory entries
-    const MAX_CHUNKS = 600;
-    const ENTRY_SIZE = 16;
-
-    for (let i = 0; i < MAX_CHUNKS; i++) {
-      const entryOffset = dirOffset + i * ENTRY_SIZE;
+    for (let i = 0; i < MAX_ENTRIES; i++) {
+      const entryOffset = DIR_OFFSET + i * ENTRY_SIZE;
       
       if (entryOffset + ENTRY_SIZE > this.buffer.byteLength) break;
 
       try {
+        // Entry format: [flags:4][offset:4][uncompressed_size:4][compressed_size:4]
+        const flags = this.view.getUint32(entryOffset, true);
         const chunkOffset = this.view.getUint32(entryOffset + 4, true);
-        const chunkSize = this.view.getUint32(entryOffset + 8, true);
+        const uncompressedSize = this.view.getUint32(entryOffset + 8, true);
         const compressedSize = this.view.getUint32(entryOffset + 12, true);
 
-        // Stop at first null/invalid entry
-        if (chunkOffset === 0 && chunkSize === 0) break;
+        // Skip null entries
+        if (chunkOffset === 0 && uncompressedSize === 0) continue;
 
         // Validate chunk bounds
+        const actualSize = compressedSize > 0 && compressedSize < uncompressedSize 
+          ? compressedSize 
+          : uncompressedSize;
+          
         if (
-          chunkOffset > 0 &&
-          chunkSize > 0 &&
+          chunkOffset >= 0x35B0 && // After directory
+          uncompressedSize > 0 &&
+          uncompressedSize < 0x100000 && // Max 1MB uncompressed
           chunkOffset < this.buffer.byteLength &&
-          chunkOffset + Math.min(chunkSize, compressedSize || chunkSize) <= this.buffer.byteLength
+          chunkOffset + actualSize <= this.buffer.byteLength
         ) {
           chunks.push({
             index: i,
             offset: chunkOffset,
-            size: chunkSize,
-            compressedSize: compressedSize,
-            isCompressed: compressedSize > 0 && compressedSize < chunkSize,
+            size: uncompressedSize,
+            compressedSize: compressedSize > 0 ? compressedSize : undefined,
+            isCompressed: compressedSize > 0 && compressedSize < uncompressedSize,
           });
         }
       } catch {
@@ -296,43 +250,103 @@ export class FBCHUNKSParser {
       }
     }
     
-    // Method 3: If directory parsing failed, scan file for player data directly
-    if (chunks.length === 0) {
-      console.log('[FBCHUNKSParser] Directory parsing failed, scanning for player data patterns...');
-      return this.scanForPlayerChunks();
+    console.log(`[FBCHUNKSParser] Directory parsed: ${chunks.length} valid chunks`);
+    
+    // If directory parsing yielded few chunks, supplement with pattern scanning
+    if (chunks.length < 50) {
+      console.log(`[FBCHUNKSParser] Low chunk count, supplementing with pattern scan...`);
+      const scannedChunks = this.scanForPlayerData();
+      // Merge, avoiding duplicates
+      for (const sc of scannedChunks) {
+        const isDupe = chunks.some(c => 
+          Math.abs(c.offset - sc.offset) < 0x1000
+        );
+        if (!isDupe) {
+          chunks.push(sc);
+        }
+      }
     }
 
     return chunks;
   }
   
   /**
-   * Scan file for player data patterns when directory parsing fails
+   * Scan file for player data patterns directly
+   * Looks for 144-byte player records with valid attribute values
    */
-  private scanForPlayerChunks(): Chunk[] {
+  private scanForPlayerData(): Chunk[] {
     const chunks: Chunk[] = [];
-    const SCAN_STEP = 0x1000; // 4KB steps
-    const MARKER = [0xdf, 0x00];
+    const RECORD_SIZE = 144;
+    const SCAN_STEP = 0x800; // 2KB steps
+    const MIN_DATA_OFFSET = 0x35B0; // After directory
     
-    // Look for regions with DF 00 markers (player record delimiters)
-    for (let pos = 0x1000; pos < this.buffer.byteLength - 0x1000; pos += SCAN_STEP) {
-      const region = this.bytes.slice(pos, Math.min(pos + 0x2000, this.buffer.byteLength));
-      let markerCount = 0;
+    console.log(`[FBCHUNKSParser] Scanning for player data patterns...`);
+    
+    // Scan the file for regions with valid player data patterns
+    for (let pos = MIN_DATA_OFFSET; pos < this.buffer.byteLength - RECORD_SIZE * 10; pos += SCAN_STEP) {
+      let validRecordCount = 0;
       
-      for (let i = 0; i < region.length - 1; i++) {
-        if (region[i] === MARKER[0] && region[i + 1] === MARKER[1]) {
-          markerCount++;
+      // Check for valid player-like records in this region
+      for (let offset = 0; offset < 0x1000 && pos + offset + RECORD_SIZE <= this.buffer.byteLength; offset += RECORD_SIZE) {
+        const recordStart = pos + offset;
+        
+        // Check for player record markers (various patterns)
+        // Player records often have playerid at offset 0 (4 bytes) followed by structured data
+        const potentialId = this.view.getUint32(recordStart, true);
+        
+        // Valid player IDs are typically 1-999999999
+        if (potentialId > 0 && potentialId < 999999999) {
+          // Check for reasonable attribute values at known offsets
+          // Overall rating at offset 50, potential at 51, age at 52
+          const rating = this.bytes[recordStart + 50];
+          const potential = this.bytes[recordStart + 51];
+          const age = this.bytes[recordStart + 52];
+          
+          if (rating >= 1 && rating <= 99 && 
+              potential >= 1 && potential <= 99 &&
+              age >= 15 && age <= 50) {
+            validRecordCount++;
+          }
         }
       }
       
-      // If this region has multiple DF 00 markers, it likely contains player data
-      if (markerCount >= 3) {
+      if (validRecordCount >= 3) {
         chunks.push({
           index: chunks.length,
           offset: pos,
           size: 0x2000, // Scan 8KB region
           isCompressed: false,
         });
-        console.log(`[FBCHUNKSParser] Found player data region at 0x${pos.toString(16)} (${markerCount} markers)`);
+        console.log(`[FBCHUNKSParser] Found player region at 0x${pos.toString(16)} (${validRecordCount} valid records)`);
+        pos += 0x1800; // Skip ahead to avoid overlap
+      }
+    }
+    
+    // Also scan for DF 00 markers which often delimit records
+    if (chunks.length < 10) {
+      console.log(`[FBCHUNKSParser] Scanning for DF 00 markers...`);
+      for (let pos = MIN_DATA_OFFSET; pos < this.buffer.byteLength - 0x2000; pos += 0x1000) {
+        const region = this.bytes.slice(pos, Math.min(pos + 0x2000, this.buffer.byteLength));
+        let markerCount = 0;
+        
+        for (let i = 0; i < region.length - 1; i++) {
+          if (region[i] === 0xdf && region[i + 1] === 0x00) {
+            markerCount++;
+          }
+        }
+        
+        if (markerCount >= 5) {
+          const isDupe = chunks.some(c => Math.abs(c.offset - pos) < 0x2000);
+          if (!isDupe) {
+            chunks.push({
+              index: chunks.length,
+              offset: pos,
+              size: 0x2000,
+              isCompressed: false,
+            });
+            console.log(`[FBCHUNKSParser] Found DF 00 region at 0x${pos.toString(16)} (${markerCount} markers)`);
+          }
+        }
       }
     }
     
@@ -352,12 +366,11 @@ export class FBCHUNKSParser {
 
   /**
    * Extract player records from a chunk
-   * Looks for DF 00 record delimiters
+   * Tries multiple extraction methods
    */
   private extractPlayerRecords(chunk: Chunk): ParsedPlayer[] {
     const players: ParsedPlayer[] = [];
     const RECORD_SIZE = 144;
-    const MARKER = [0xdf, 0x00];
 
     // Get chunk data
     const actualSize = chunk.isCompressed
@@ -369,8 +382,9 @@ export class FBCHUNKSParser {
     }
 
     const chunkData = this.bytes.slice(chunk.offset, chunk.offset + actualSize);
-
-    // Scan for DF 00 markers
+    
+    // Method 1: Look for DF 00 markers
+    const MARKER = [0xdf, 0x00];
     for (let i = 0; i < chunkData.length - RECORD_SIZE - 2; i++) {
       if (chunkData[i] === MARKER[0] && chunkData[i + 1] === MARKER[1]) {
         const recordStart = i + 2;
@@ -378,12 +392,45 @@ export class FBCHUNKSParser {
           const recordBytes = chunkData.slice(recordStart, recordStart + RECORD_SIZE);
           const player = this.parsePlayerRecord(recordBytes);
           
-          // Validate player data
           if (this.isValidPlayer(player)) {
             players.push(player);
+            i += RECORD_SIZE; // Skip to next potential record
           }
+        }
+      }
+    }
+    
+    // Method 2: If no markers found, try direct stride-based scanning
+    if (players.length === 0) {
+      for (let offset = 0; offset + RECORD_SIZE <= chunkData.length; offset += RECORD_SIZE) {
+        const recordBytes = chunkData.slice(offset, offset + RECORD_SIZE);
+        const player = this.parsePlayerRecord(recordBytes);
+        
+        if (this.isValidPlayer(player)) {
+          players.push(player);
+        }
+      }
+    }
+    
+    // Method 3: Try scanning with different alignments if still no results
+    if (players.length === 0) {
+      // Try scanning byte-by-byte for valid player patterns
+      for (let offset = 0; offset + RECORD_SIZE <= chunkData.length; offset++) {
+        // Check if this looks like a player record start
+        const potentialId = new DataView(
+          chunkData.buffer, 
+          chunkData.byteOffset + offset, 
+          4
+        ).getUint32(0, true);
+        
+        if (potentialId > 100 && potentialId < 999999999) {
+          const recordBytes = chunkData.slice(offset, offset + RECORD_SIZE);
+          const player = this.parsePlayerRecord(recordBytes);
           
-          i += RECORD_SIZE; // Skip to next potential record
+          if (this.isValidPlayer(player)) {
+            players.push(player);
+            offset += RECORD_SIZE - 1; // Skip ahead
+          }
         }
       }
     }
@@ -478,10 +525,18 @@ export class FBCHUNKSParser {
     const chunks = this.parseChunkDirectory();
     const mediumChunks = chunks.filter((c) => this.classifyChunk(c) === "MEDIUM");
     const smallChunks = chunks.filter((c) => this.classifyChunk(c) === "SMALL");
-    const chunksToProcess = [...mediumChunks, ...smallChunks];
+    // Also include LARGE chunks (uncompressed ones may contain data)
+    const largeChunks = chunks.filter((c) => this.classifyChunk(c) === "LARGE" && !c.isCompressed);
+    const chunksToProcess = [...mediumChunks, ...smallChunks, ...largeChunks, ...chunks];
+    
+    // Deduplicate by offset
+    const uniqueChunks = Array.from(
+      new Map(chunksToProcess.map(c => [c.offset, c])).values()
+    );
+    
     const allPlayers: ParsedPlayer[] = [];
 
-    console.log(`[FBCHUNKSParser] Found ${chunks.length} chunks, ${mediumChunks.length} MEDIUM, ${smallChunks.length} SMALL`);
+    console.log(`[FBCHUNKSParser] Found ${chunks.length} chunks, ${mediumChunks.length} MEDIUM, ${smallChunks.length} SMALL, ${largeChunks.length} LARGE (uncompressed)`);
 
     onProgress?.({
       stage: "parsing",
@@ -489,35 +544,51 @@ export class FBCHUNKSParser {
       totalChunks: chunks.length,
       processedChunks: 0,
       playersFound: 0,
-      detail: `Found ${chunks.length} chunks (${mediumChunks.length} MEDIUM, ${smallChunks.length} SMALL)`,
+      detail: `Found ${chunks.length} chunks, scanning for player data...`,
     });
 
-    // Extract players from MEDIUM and SMALL chunks
+    // Extract players from chunks
     let processedCount = 0;
-    for (const chunk of chunksToProcess) {
+    for (const chunk of uniqueChunks) {
       const players = this.extractPlayerRecords(chunk);
       allPlayers.push(...players);
       processedCount++;
 
       // Report progress every 10 chunks
-      if (processedCount % 10 === 0 || processedCount === chunksToProcess.length) {
-        const progressPct = 30 + Math.floor((processedCount / chunksToProcess.length) * 50);
+      if (processedCount % 10 === 0 || processedCount === uniqueChunks.length) {
+        const progressPct = 30 + Math.floor((processedCount / uniqueChunks.length) * 40);
         onProgress?.({
           stage: "extracting",
           progress: progressPct,
           totalChunks: chunks.length,
           processedChunks: processedCount,
           playersFound: allPlayers.length,
-          detail: `Processing chunk ${processedCount}/${chunksToProcess.length}...`,
+          detail: `Processing chunk ${processedCount}/${uniqueChunks.length}...`,
         });
       }
+    }
+    
+    // If no players found from chunks, do a full file scan
+    if (allPlayers.length === 0) {
+      onProgress?.({
+        stage: "extracting",
+        progress: 75,
+        totalChunks: chunks.length,
+        processedChunks: uniqueChunks.length,
+        playersFound: 0,
+        detail: "No players in chunks, performing full file scan...",
+      });
+      
+      console.log(`[FBCHUNKSParser] No players from chunks, performing full file scan...`);
+      const scannedPlayers = this.fullFileScan();
+      allPlayers.push(...scannedPlayers);
     }
 
     onProgress?.({
       stage: "extracting",
       progress: 85,
       totalChunks: chunks.length,
-      processedChunks: chunksToProcess.length,
+      processedChunks: uniqueChunks.length,
       playersFound: allPlayers.length,
       detail: "Deduplicating player records...",
     });
@@ -537,7 +608,7 @@ export class FBCHUNKSParser {
       stage: "complete",
       progress: 100,
       totalChunks: chunks.length,
-      processedChunks: chunksToProcess.length,
+      processedChunks: uniqueChunks.length,
       playersFound: players.length,
       detail: `Extracted ${players.length} unique players`,
     });
@@ -549,6 +620,54 @@ export class FBCHUNKSParser {
       totalChunks: chunks.length,
       mediumChunks: mediumChunks.length,
     };
+  }
+  
+  /**
+   * Full file scan - brute force search for player records
+   */
+  private fullFileScan(): ParsedPlayer[] {
+    const players: ParsedPlayer[] = [];
+    const RECORD_SIZE = 144;
+    const MIN_OFFSET = 0x35B0; // After directory
+    
+    console.log(`[FBCHUNKSParser] Full file scan from 0x${MIN_OFFSET.toString(16)} to 0x${this.buffer.byteLength.toString(16)}`);
+    
+    // Scan the entire data region for valid player records
+    for (let offset = MIN_OFFSET; offset + RECORD_SIZE <= this.buffer.byteLength; offset++) {
+      // Quick check: valid player ID at offset 0
+      const potentialId = this.view.getUint32(offset, true);
+      
+      // Player IDs are typically 100+
+      if (potentialId < 100 || potentialId > 999999999) {
+        continue;
+      }
+      
+      // Check ratings at expected offsets (50, 51, 52)
+      const rating = this.bytes[offset + 50];
+      const potential = this.bytes[offset + 51];
+      const age = this.bytes[offset + 52];
+      
+      if (rating >= 1 && rating <= 99 && 
+          potential >= 1 && potential <= 99 &&
+          age >= 15 && age <= 50) {
+        // This looks like a valid player record
+        const recordBytes = this.bytes.slice(offset, offset + RECORD_SIZE);
+        const player = this.parsePlayerRecord(recordBytes);
+        
+        if (this.isValidPlayer(player)) {
+          players.push(player);
+          offset += RECORD_SIZE - 1; // Skip to next potential record
+          
+          // Log every 1000 players found
+          if (players.length % 1000 === 0) {
+            console.log(`[FBCHUNKSParser] Full scan found ${players.length} players so far...`);
+          }
+        }
+      }
+    }
+    
+    console.log(`[FBCHUNKSParser] Full file scan found ${players.length} players`);
+    return players;
   }
 }
 
