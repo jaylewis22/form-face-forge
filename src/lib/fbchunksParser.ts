@@ -100,68 +100,93 @@ export async function detectFBCHUNKS(file: File): Promise<boolean> {
 }
 
 // Player attribute offsets within 144-byte record
-// Based on documented EA FC player schema
-const PLAYER_SCHEMA: Record<string, { offset: number; size: 1 | 2 | 4 }> = {
+// Based on documented EA FC player schema - attributes are typically 1 byte each (0-99)
+// The record structure groups related attributes together
+const PLAYER_SCHEMA: Record<string, { offset: number; size: 1 | 2 | 4; isAttribute?: boolean }> = {
+  // Identity block (bytes 0-15)
   playerid: { offset: 0, size: 4 },
-  // Ratings at standard offsets
-  overallrating: { offset: 50, size: 1 },
-  potential: { offset: 51, size: 1 },
-  age: { offset: 52, size: 1 },
-  height: { offset: 53, size: 1 },
-  weight: { offset: 54, size: 1 },
-  // Position fields
-  preferredposition1: { offset: 55, size: 1 },
-  preferredposition2: { offset: 56, size: 1 },
-  preferredposition3: { offset: 57, size: 1 },
-  preferredposition4: { offset: 58, size: 1 },
-  // Nationality
-  nationality: { offset: 12, size: 2 },
-  // Pace (60-61)
-  acceleration: { offset: 60, size: 1 },
-  sprintspeed: { offset: 61, size: 1 },
-  // Shooting (62-67)
-  positioning: { offset: 62, size: 1 },
-  finishing: { offset: 63, size: 1 },
-  shotpower: { offset: 64, size: 1 },
-  longshots: { offset: 65, size: 1 },
-  volleys: { offset: 66, size: 1 },
-  penalties: { offset: 67, size: 1 },
-  // Passing (68-73)
-  vision: { offset: 68, size: 1 },
-  crossing: { offset: 69, size: 1 },
-  freekickaccuracy: { offset: 70, size: 1 },
-  shortpassing: { offset: 71, size: 1 },
-  longpassing: { offset: 72, size: 1 },
-  curve: { offset: 73, size: 1 },
-  // Dribbling (74-79)
-  agility: { offset: 74, size: 1 },
-  balance: { offset: 75, size: 1 },
-  reactions: { offset: 76, size: 1 },
-  ballcontrol: { offset: 77, size: 1 },
-  dribbling: { offset: 78, size: 1 },
-  composure: { offset: 79, size: 1 },
-  // Defending (80-84)
-  interceptions: { offset: 80, size: 1 },
-  headingaccuracy: { offset: 81, size: 1 },
-  defawareness: { offset: 82, size: 1 },
-  standingtackle: { offset: 83, size: 1 },
-  slidingtackle: { offset: 84, size: 1 },
-  // Physical (85-88)
-  jumping: { offset: 85, size: 1 },
-  stamina: { offset: 86, size: 1 },
-  strength: { offset: 87, size: 1 },
-  aggression: { offset: 88, size: 1 },
-  // GK (89-93)
-  gkdiving: { offset: 89, size: 1 },
-  gkhandling: { offset: 90, size: 1 },
-  gkkicking: { offset: 91, size: 1 },
-  gkpositioning: { offset: 92, size: 1 },
-  gkreflexes: { offset: 93, size: 1 },
-  // Additional
-  weakfootabilitytypecode: { offset: 94, size: 1 },
-  skillmoves: { offset: 95, size: 1 },
-  preferredfoot: { offset: 96, size: 1 },
+  nationality: { offset: 4, size: 2 },
+  
+  // Core ratings block (bytes 16-25)
+  overallrating: { offset: 16, size: 1, isAttribute: true },
+  potential: { offset: 17, size: 1, isAttribute: true },
+  
+  // Physical info (bytes 18-22)
+  age: { offset: 18, size: 1 },
+  height: { offset: 19, size: 1 },
+  weight: { offset: 20, size: 1 },
+  preferredfoot: { offset: 21, size: 1 },
+  weakfootabilitytypecode: { offset: 22, size: 1, isAttribute: true },
+  skillmoves: { offset: 23, size: 1, isAttribute: true },
+  
+  // Position block (bytes 24-31)
+  preferredposition1: { offset: 24, size: 1 },
+  preferredposition2: { offset: 25, size: 1 },
+  preferredposition3: { offset: 26, size: 1 },
+  preferredposition4: { offset: 27, size: 1 },
+  
+  // Pace attributes (bytes 32-35)
+  acceleration: { offset: 32, size: 1, isAttribute: true },
+  sprintspeed: { offset: 33, size: 1, isAttribute: true },
+  
+  // Shooting attributes (bytes 36-45)
+  positioning: { offset: 36, size: 1, isAttribute: true },
+  finishing: { offset: 37, size: 1, isAttribute: true },
+  shotpower: { offset: 38, size: 1, isAttribute: true },
+  longshots: { offset: 39, size: 1, isAttribute: true },
+  volleys: { offset: 40, size: 1, isAttribute: true },
+  penalties: { offset: 41, size: 1, isAttribute: true },
+  
+  // Passing attributes (bytes 46-55)
+  vision: { offset: 46, size: 1, isAttribute: true },
+  crossing: { offset: 47, size: 1, isAttribute: true },
+  freekickaccuracy: { offset: 48, size: 1, isAttribute: true },
+  shortpassing: { offset: 49, size: 1, isAttribute: true },
+  longpassing: { offset: 50, size: 1, isAttribute: true },
+  curve: { offset: 51, size: 1, isAttribute: true },
+  
+  // Dribbling attributes (bytes 56-65)
+  agility: { offset: 56, size: 1, isAttribute: true },
+  balance: { offset: 57, size: 1, isAttribute: true },
+  reactions: { offset: 58, size: 1, isAttribute: true },
+  ballcontrol: { offset: 59, size: 1, isAttribute: true },
+  dribbling: { offset: 60, size: 1, isAttribute: true },
+  composure: { offset: 61, size: 1, isAttribute: true },
+  
+  // Defending attributes (bytes 66-75)
+  interceptions: { offset: 66, size: 1, isAttribute: true },
+  headingaccuracy: { offset: 67, size: 1, isAttribute: true },
+  defawareness: { offset: 68, size: 1, isAttribute: true },
+  standingtackle: { offset: 69, size: 1, isAttribute: true },
+  slidingtackle: { offset: 70, size: 1, isAttribute: true },
+  
+  // Physical attributes (bytes 76-85)
+  jumping: { offset: 76, size: 1, isAttribute: true },
+  stamina: { offset: 77, size: 1, isAttribute: true },
+  strength: { offset: 78, size: 1, isAttribute: true },
+  aggression: { offset: 79, size: 1, isAttribute: true },
+  
+  // GK attributes (bytes 86-95)
+  gkdiving: { offset: 86, size: 1, isAttribute: true },
+  gkhandling: { offset: 87, size: 1, isAttribute: true },
+  gkkicking: { offset: 88, size: 1, isAttribute: true },
+  gkpositioning: { offset: 89, size: 1, isAttribute: true },
+  gkreflexes: { offset: 90, size: 1, isAttribute: true },
 };
+
+// Attribute fields that should be clamped to 1-99
+const ATTRIBUTE_FIELDS = Object.entries(PLAYER_SCHEMA)
+  .filter(([, schema]) => schema.isAttribute)
+  .map(([field]) => field);
+
+/**
+ * Clamp attribute value to valid range (1-99)
+ */
+function clampAttribute(value: number): number {
+  if (value < 1) return 1;
+  if (value > 99) return 99;
+  return value;
+}
 
 export class FBCHUNKSParser {
   private buffer: ArrayBuffer;
@@ -296,11 +321,11 @@ export class FBCHUNKSParser {
         
         // Valid player IDs are typically 1-999999999
         if (potentialId > 0 && potentialId < 999999999) {
-          // Check for reasonable attribute values at known offsets
-          // Overall rating at offset 50, potential at 51, age at 52
-          const rating = this.bytes[recordStart + 50];
-          const potential = this.bytes[recordStart + 51];
-          const age = this.bytes[recordStart + 52];
+          // Check for reasonable attribute values at the new schema offsets
+          // Overall rating at offset 16, potential at 17, age at 18
+          const rating = this.bytes[recordStart + 16];
+          const potential = this.bytes[recordStart + 17];
+          const age = this.bytes[recordStart + 18];
           
           if (rating >= 1 && rating <= 99 && 
               potential >= 1 && potential <= 99 &&
@@ -448,13 +473,21 @@ export class FBCHUNKSParser {
     for (const [field, schema] of Object.entries(PLAYER_SCHEMA)) {
       if (schema.offset + schema.size <= bytes.length) {
         try {
+          let value: number;
           if (schema.size === 1) {
-            (player as Record<string, number>)[field] = bytes[schema.offset];
+            value = bytes[schema.offset];
           } else if (schema.size === 2) {
-            (player as Record<string, number>)[field] = view.getUint16(schema.offset, true);
-          } else if (schema.size === 4) {
-            (player as Record<string, number>)[field] = view.getUint32(schema.offset, true);
+            value = view.getUint16(schema.offset, true);
+          } else {
+            value = view.getUint32(schema.offset, true);
           }
+          
+          // Clamp attribute values to valid range (1-99)
+          if (schema.isAttribute && schema.size === 1) {
+            value = clampAttribute(value);
+          }
+          
+          (player as Record<string, number>)[field] = value;
         } catch {
           // Skip field on error
         }
@@ -642,10 +675,10 @@ export class FBCHUNKSParser {
         continue;
       }
       
-      // Check ratings at expected offsets (50, 51, 52)
-      const rating = this.bytes[offset + 50];
-      const potential = this.bytes[offset + 51];
-      const age = this.bytes[offset + 52];
+      // Check ratings at expected offsets (16, 17, 18 per new schema)
+      const rating = this.bytes[offset + 16];
+      const potential = this.bytes[offset + 17];
+      const age = this.bytes[offset + 18];
       
       if (rating >= 1 && rating <= 99 && 
           potential >= 1 && potential <= 99 &&
