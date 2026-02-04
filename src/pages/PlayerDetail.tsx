@@ -4,8 +4,6 @@ import { AppLayout } from "@/components/Layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -18,279 +16,210 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   ArrowLeft,
   Edit,
   Share2,
   Download,
-  Trophy,
-  Target,
   Activity,
   TrendingUp,
-  Award,
+  User,
+  Zap,
+  Target,
+  Brain,
+  Shield,
   Heart,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { usePlayer, Player } from "@/hooks/usePlayers";
+import { supabase } from "@/integrations/supabase/client";
+import { useQueryClient } from "@tanstack/react-query";
 
-// Mock player data - in a real app, this would come from an API
-const mockPlayersData: Record<string, any> = {
-  "1": {
-    id: "1",
-    name: "David de Gea",
-    position: "Goalkeeper",
-    number: 1,
-    age: 32,
-    nationality: "Spain",
-    rating: 85,
-    height: "192 cm",
-    weight: "82 kg",
-    foot: "Right",
-    joinDate: "July 2011",
-    contract: "June 2025",
-    value: "€18M",
-    wage: "€375K/week",
-    attributes: {
-      physical: [
-        { name: "Pace", value: 57 },
-        { name: "Strength", value: 70 },
-        { name: "Stamina", value: 75 },
-      ],
-      technical: [
-        { name: "Handling", value: 88 },
-        { name: "Reflexes", value: 90 },
-        { name: "Positioning", value: 89 },
-        { name: "Diving", value: 87 },
-      ],
-      mental: [
-        { name: "Composure", value: 86 },
-        { name: "Concentration", value: 88 },
-        { name: "Decision Making", value: 84 },
-      ],
-    },
-    stats: {
-      appearances: 145,
-      cleanSheets: 58,
-      saves: 412,
-      goalsAgainst: 87,
-    },
-  },
-  "2": {
-    id: "2",
-    name: "Harry Maguire",
-    position: "Defender",
-    number: 5,
-    age: 30,
-    nationality: "England",
-    rating: 82,
-    height: "194 cm",
-    weight: "100 kg",
-    foot: "Right",
-    joinDate: "August 2019",
-    contract: "June 2025",
-    value: "€22M",
-    wage: "€190K/week",
-    attributes: {
-      physical: [
-        { name: "Pace", value: 60 },
-        { name: "Strength", value: 86 },
-        { name: "Stamina", value: 76 },
-      ],
-      technical: [
-        { name: "Marking", value: 83 },
-        { name: "Tackling", value: 84 },
-        { name: "Heading", value: 88 },
-        { name: "Passing", value: 77 },
-      ],
-      mental: [
-        { name: "Composure", value: 80 },
-        { name: "Concentration", value: 82 },
-        { name: "Decision Making", value: 79 },
-      ],
-    },
-    stats: {
-      appearances: 128,
-      goals: 7,
-      assists: 3,
-      tackles: 245,
-    },
-  },
-  "3": {
-    id: "3",
-    name: "Bruno Fernandes",
-    position: "Midfielder",
-    number: 8,
-    age: 28,
-    nationality: "Portugal",
-    rating: 88,
-    height: "179 cm",
-    weight: "69 kg",
-    foot: "Right",
-    joinDate: "January 2020",
-    contract: "June 2026",
-    value: "€75M",
-    wage: "€240K/week",
-    attributes: {
-      physical: [
-        { name: "Pace", value: 75 },
-        { name: "Strength", value: 72 },
-        { name: "Stamina", value: 88 },
-      ],
-      technical: [
-        { name: "Passing", value: 91 },
-        { name: "Dribbling", value: 84 },
-        { name: "Shooting", value: 87 },
-        { name: "Vision", value: 92 },
-      ],
-      mental: [
-        { name: "Composure", value: 88 },
-        { name: "Concentration", value: 86 },
-        { name: "Decision Making", value: 90 },
-      ],
-    },
-    stats: {
-      appearances: 156,
-      goals: 58,
-      assists: 47,
-      keyPasses: 312,
-    },
-  },
-  "4": {
-    id: "4",
-    name: "Marcus Rashford",
-    position: "Forward",
-    number: 10,
-    age: 25,
-    nationality: "England",
-    rating: 86,
-    height: "180 cm",
-    weight: "70 kg",
-    foot: "Right",
-    joinDate: "July 2015",
-    contract: "June 2028",
-    value: "€85M",
-    wage: "€325K/week",
-    attributes: {
-      physical: [
-        { name: "Pace", value: 93 },
-        { name: "Strength", value: 78 },
-        { name: "Stamina", value: 85 },
-      ],
-      technical: [
-        { name: "Finishing", value: 85 },
-        { name: "Dribbling", value: 87 },
-        { name: "Shooting", value: 86 },
-        { name: "Crossing", value: 81 },
-      ],
-      mental: [
-        { name: "Composure", value: 84 },
-        { name: "Concentration", value: 82 },
-        { name: "Decision Making", value: 83 },
-      ],
-    },
-    stats: {
-      appearances: 178,
-      goals: 72,
-      assists: 38,
-      shots: 456,
-    },
-  },
-  "5": {
-    id: "5",
-    name: "Casemiro",
-    position: "Midfielder",
-    number: 18,
-    age: 31,
-    nationality: "Brazil",
-    rating: 87,
-    height: "185 cm",
-    weight: "84 kg",
-    foot: "Right",
-    joinDate: "August 2022",
-    contract: "June 2026",
-    value: "€45M",
-    wage: "€350K/week",
-    attributes: {
-      physical: [
-        { name: "Pace", value: 70 },
-        { name: "Strength", value: 88 },
-        { name: "Stamina", value: 84 },
-      ],
-      technical: [
-        { name: "Tackling", value: 90 },
-        { name: "Passing", value: 84 },
-        { name: "Interceptions", value: 89 },
-        { name: "Positioning", value: 91 },
-      ],
-      mental: [
-        { name: "Composure", value: 89 },
-        { name: "Concentration", value: 88 },
-        { name: "Decision Making", value: 87 },
-      ],
-    },
-    stats: {
-      appearances: 89,
-      goals: 8,
-      assists: 7,
-      tackles: 234,
-    },
-  },
-};
+import { RatingBadge, PotentialBadge, AttributeBar } from "@/components/Player/RatingBadge";
+import { PositionBadge, PositionGroup } from "@/components/Player/PositionBadge";
+import { AttributeHexagon } from "@/components/Player/RadarChart";
 
 export default function PlayerDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [editedPlayer, setEditedPlayer] = useState(mockPlayersData[id || "1"] || mockPlayersData["1"]);
-
-  const player = editedPlayer;
+  
+  const playerId = id ? parseInt(id, 10) : null;
+  const { data: player, isLoading, error } = usePlayer(playerId);
+  
+  const [editedPlayer, setEditedPlayer] = useState<Partial<Player>>({});
 
   const handleEdit = () => {
-    setIsEditDialogOpen(true);
+    if (player) {
+      setEditedPlayer({ ...player });
+      setIsEditDialogOpen(true);
+    }
   };
 
-  const handleSaveEdit = () => {
-    // In a real app, this would save to the database
-    toast({
-      title: "Player Updated",
-      description: "Player information has been updated successfully!",
-    });
-    setIsEditDialogOpen(false);
+  const handleSaveEdit = async () => {
+    if (!player || !editedPlayer) return;
+    
+    try {
+      const { error } = await supabase
+        .from("players")
+        .update(editedPlayer)
+        .eq("id", player.id);
+        
+      if (error) throw error;
+      
+      toast({
+        title: "Player Updated",
+        description: "Player information has been updated successfully!",
+      });
+      
+      queryClient.invalidateQueries({ queryKey: ["player", player.id] });
+      queryClient.invalidateQueries({ queryKey: ["players"] });
+      setIsEditDialogOpen(false);
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: "Failed to update player. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleInputChange = (field: string, value: any) => {
+  const handleInputChange = (field: keyof Player, value: string | number | null) => {
     setEditedPlayer((prev) => ({
       ...prev,
       [field]: value,
     }));
   };
 
-  const handleAttributeChange = (category: 'physical' | 'technical' | 'mental', index: number, value: number) => {
-    setEditedPlayer((prev) => ({
-      ...prev,
-      attributes: {
-        ...prev.attributes,
-        [category]: prev.attributes[category].map((attr: any, i: number) => 
-          i === index ? { ...attr, value } : attr
-        ),
-      },
-    }));
-  };
-
   const handleShare = () => {
+    navigator.clipboard.writeText(window.location.href);
     toast({
-      title: "Share Player",
-      description: "Player profile copied to clipboard!",
+      title: "Link Copied",
+      description: "Player profile link copied to clipboard!",
     });
   };
 
   const handleExport = () => {
+    if (!player) return;
+    const dataStr = JSON.stringify(player, null, 2);
+    const blob = new Blob([dataStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${player.name.replace(/\s+/g, "_")}_profile.json`;
+    a.click();
     toast({
-      title: "Export Player Data",
+      title: "Export Complete",
       description: "Player data exported successfully!",
     });
   };
+
+  if (isLoading) {
+    return (
+      <AppLayout>
+        <div className="space-y-6 animate-fade-in">
+          <div className="flex items-center gap-4">
+            <Skeleton className="h-10 w-10 rounded" />
+            <div>
+              <Skeleton className="h-8 w-48" />
+              <Skeleton className="h-4 w-32 mt-2" />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <Skeleton className="h-[500px] rounded-xl" />
+            <Skeleton className="h-[500px] lg:col-span-2 rounded-xl" />
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (error || !player) {
+    return (
+      <AppLayout>
+        <div className="space-y-6 animate-fade-in">
+          <div className="flex items-center gap-4">
+            <Button variant="outline" size="icon" onClick={() => navigate(-1)} className="glass">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <div>
+              <h1 className="text-3xl font-bold">Player Not Found</h1>
+              <p className="text-muted-foreground">The requested player could not be found.</p>
+            </div>
+          </div>
+          <div className="glass rounded-xl p-8 text-center">
+            <User className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
+            <p className="text-muted-foreground mb-4">
+              This player may have been removed or the ID is invalid.
+            </p>
+            <Button onClick={() => navigate("/players")}>Back to Players</Button>
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  const isGK = player.position?.toUpperCase() === "GK";
+
+  // Build attribute groups
+  const paceAttributes = [
+    { name: "Acceleration", value: player.acceleration || 0 },
+    { name: "Sprint Speed", value: player.sprint_speed || 0 },
+  ];
+  
+  const shootingAttributes = [
+    { name: "Positioning", value: player.positioning || 0 },
+    { name: "Finishing", value: player.finishing || 0 },
+    { name: "Shot Power", value: player.shot_power || 0 },
+    { name: "Long Shots", value: player.long_shots || 0 },
+    { name: "Volleys", value: player.volleys || 0 },
+    { name: "Penalties", value: player.penalties || 0 },
+  ];
+  
+  const passingAttributes = [
+    { name: "Vision", value: player.vision || 0 },
+    { name: "Crossing", value: player.crossing || 0 },
+    { name: "FK Accuracy", value: player.free_kick_accuracy || 0 },
+    { name: "Short Passing", value: player.short_passing || 0 },
+    { name: "Long Passing", value: player.long_passing || 0 },
+    { name: "Curve", value: player.curve || 0 },
+  ];
+  
+  const dribblingAttributes = [
+    { name: "Agility", value: player.agility || 0 },
+    { name: "Balance", value: player.balance || 0 },
+    { name: "Reactions", value: player.reactions || 0 },
+    { name: "Ball Control", value: player.ball_control || 0 },
+    { name: "Composure", value: player.composure || 0 },
+  ];
+  
+  const defendingAttributes = [
+    { name: "Interceptions", value: player.interceptions || 0 },
+    { name: "Heading Accuracy", value: player.heading_accuracy || 0 },
+    { name: "Def. Awareness", value: player.def_awareness || 0 },
+    { name: "Standing Tackle", value: player.standing_tackle || 0 },
+    { name: "Sliding Tackle", value: player.sliding_tackle || 0 },
+  ];
+  
+  const physicalAttributes = [
+    { name: "Jumping", value: player.jumping || 0 },
+    { name: "Stamina", value: player.stamina || 0 },
+    { name: "Strength", value: player.strength || 0 },
+    { name: "Aggression", value: player.aggression || 0 },
+  ];
+  
+  const gkAttributes = [
+    { name: "Diving", value: player.gk_diving || 0 },
+    { name: "Handling", value: player.gk_handling || 0 },
+    { name: "Kicking", value: player.gk_kicking || 0 },
+    { name: "Reflexes", value: player.gk_reflexes || 0 },
+    { name: "Positioning", value: player.gk_positioning || 0 },
+  ];
 
   return (
     <AppLayout>
@@ -298,12 +227,7 @@ export default function PlayerDetail() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => navigate(-1)}
-              className="glass"
-            >
+            <Button variant="outline" size="icon" onClick={() => navigate(-1)} className="glass">
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <div>
@@ -332,20 +256,36 @@ export default function PlayerDetail() {
               <div className="flex flex-col items-center text-center space-y-4">
                 <Avatar className="w-32 h-32 border-4 border-primary/20">
                   <AvatarFallback className="text-4xl bg-gradient-to-br from-primary/20 to-primary/10">
-                    {player.number}
+                    {player.jersey_number || <User className="w-12 h-12" />}
                   </AvatarFallback>
                 </Avatar>
 
                 <div className="space-y-2">
                   <h2 className="text-2xl font-bold">{player.name}</h2>
-                  <Badge variant="secondary" className="text-sm">
-                    {player.position}
-                  </Badge>
-                  <div className="text-3xl font-bold text-green-500">{player.rating}</div>
+                  {player.short_name && player.short_name !== player.name && (
+                    <p className="text-muted-foreground">{player.short_name}</p>
+                  )}
+                  <div className="flex items-center justify-center gap-2">
+                    <PositionBadge position={player.position || "N/A"} size="lg" />
+                    {player.secondary_position && (
+                      <PositionBadge position={player.secondary_position} size="md" />
+                    )}
+                  </div>
+                  <PositionGroup position={player.position || ""} />
+                </div>
+
+                {/* Ratings */}
+                <div className="py-4">
+                  <PotentialBadge
+                    current={player.overall_rating || 0}
+                    potential={player.potential_rating || player.overall_rating || 0}
+                    size="lg"
+                  />
                 </div>
 
                 <Separator />
 
+                {/* Basic Info */}
                 <div className="w-full space-y-3 text-left text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Age:</span>
@@ -353,41 +293,62 @@ export default function PlayerDetail() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Nationality:</span>
-                    <span className="font-medium">{player.nationality}</span>
+                    <span className="font-medium">{player.nationality || "Unknown"}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Height:</span>
-                    <span className="font-medium">{player.height}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Weight:</span>
-                    <span className="font-medium">{player.weight}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Preferred Foot:</span>
-                    <span className="font-medium">{player.foot}</span>
-                  </div>
+                  {player.height && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Height:</span>
+                      <span className="font-medium">{player.height} cm</span>
+                    </div>
+                  )}
+                  {player.weight && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Weight:</span>
+                      <span className="font-medium">{player.weight} kg</span>
+                    </div>
+                  )}
+                  {player.preferred_foot && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Preferred Foot:</span>
+                      <span className="font-medium">{player.preferred_foot}</span>
+                    </div>
+                  )}
+                  {player.weak_foot && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Weak Foot:</span>
+                      <span className="font-medium">{"★".repeat(player.weak_foot)}</span>
+                    </div>
+                  )}
+                  {player.skill_moves && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Skill Moves:</span>
+                      <span className="font-medium">{"★".repeat(player.skill_moves)}</span>
+                    </div>
+                  )}
                 </div>
 
                 <Separator />
 
+                {/* Team & Contract */}
                 <div className="w-full space-y-3 text-left text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Market Value:</span>
-                    <span className="font-bold text-primary">{player.value}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Wage:</span>
-                    <span className="font-medium">{player.wage}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Joined:</span>
-                    <span className="font-medium">{player.joinDate}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Contract Until:</span>
-                    <span className="font-medium">{player.contract}</span>
-                  </div>
+                  {player.team_name && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Team:</span>
+                      <span className="font-bold text-primary">{player.team_name}</span>
+                    </div>
+                  )}
+                  {player.jersey_number && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Jersey:</span>
+                      <span className="font-medium">#{player.jersey_number}</span>
+                    </div>
+                  )}
+                  {player.wage && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Wage:</span>
+                      <span className="font-medium">€{player.wage.toLocaleString()}/week</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </CardContent>
@@ -395,80 +356,140 @@ export default function PlayerDetail() {
 
           {/* Stats and Attributes */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Season Stats */}
-            <Card className="glass">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Trophy className="h-5 w-5" />
-                  Season Statistics
-                </CardTitle>
-                <CardDescription>Performance metrics for current season</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {Object.entries(player.stats).map(([key, value]) => (
-                    <div key={key} className="text-center p-4 rounded-lg bg-card/50 border">
-                      <div className="text-3xl font-bold text-primary">{value as number}</div>
-                      <div className="text-xs text-muted-foreground mt-1 capitalize">
-                        {String(key).replace(/([A-Z])/g, " $1").trim()}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Attributes */}
+            {/* Radar Chart */}
             <Card className="glass">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Activity className="h-5 w-5" />
-                  Player Attributes
+                  Attribute Overview
+                </CardTitle>
+                <CardDescription>Visual breakdown of main attributes</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex justify-center">
+                  <AttributeHexagon
+                    pace={player.pace || 0}
+                    shooting={player.shooting || 0}
+                    passing={player.passing || 0}
+                    dribbling={player.dribbling || 0}
+                    defending={player.defending || 0}
+                    physical={player.physical || 0}
+                    size={280}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Detailed Attributes */}
+            <Card className="glass">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5" />
+                  Detailed Attributes
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <Tabs defaultValue="physical" className="space-y-4">
-                  <TabsList className="grid grid-cols-3 w-full">
-                    <TabsTrigger value="physical">Physical</TabsTrigger>
-                    <TabsTrigger value="technical">Technical</TabsTrigger>
-                    <TabsTrigger value="mental">Mental</TabsTrigger>
+                <Tabs defaultValue={isGK ? "goalkeeping" : "pace"} className="space-y-4">
+                  <TabsList className="grid grid-cols-3 md:grid-cols-6 w-full">
+                    {isGK ? (
+                      <TabsTrigger value="goalkeeping">GK</TabsTrigger>
+                    ) : (
+                      <>
+                        <TabsTrigger value="pace">
+                          <Zap className="w-3 h-3 mr-1" />
+                          PAC
+                        </TabsTrigger>
+                        <TabsTrigger value="shooting">
+                          <Target className="w-3 h-3 mr-1" />
+                          SHO
+                        </TabsTrigger>
+                        <TabsTrigger value="passing">PAS</TabsTrigger>
+                        <TabsTrigger value="dribbling">DRI</TabsTrigger>
+                        <TabsTrigger value="defending">
+                          <Shield className="w-3 h-3 mr-1" />
+                          DEF
+                        </TabsTrigger>
+                        <TabsTrigger value="physical">
+                          <Heart className="w-3 h-3 mr-1" />
+                          PHY
+                        </TabsTrigger>
+                      </>
+                    )}
                   </TabsList>
 
-                  <TabsContent value="physical" className="space-y-3">
-                    {player.attributes.physical.map((attr: any) => (
-                      <div key={attr.name} className="space-y-2">
-                        <div className="flex justify-between text-sm">
-                          <span>{attr.name}</span>
-                          <span className="font-bold">{attr.value}</span>
-                        </div>
-                        <Progress value={attr.value} className="h-2" />
+                  {isGK ? (
+                    <TabsContent value="goalkeeping" className="space-y-3">
+                      <div className="flex items-center gap-2 mb-4">
+                        <RatingBadge rating={player.overall_rating || 0} size="lg" />
+                        <span className="text-lg font-semibold">Goalkeeping</span>
                       </div>
-                    ))}
-                  </TabsContent>
+                      {gkAttributes.map((attr) => (
+                        <AttributeBar key={attr.name} value={attr.value} label={attr.name} />
+                      ))}
+                    </TabsContent>
+                  ) : (
+                    <>
+                      <TabsContent value="pace" className="space-y-3">
+                        <div className="flex items-center gap-2 mb-4">
+                          <RatingBadge rating={player.pace || 0} size="lg" />
+                          <span className="text-lg font-semibold">Pace</span>
+                        </div>
+                        {paceAttributes.map((attr) => (
+                          <AttributeBar key={attr.name} value={attr.value} label={attr.name} />
+                        ))}
+                      </TabsContent>
 
-                  <TabsContent value="technical" className="space-y-3">
-                    {player.attributes.technical.map((attr: any) => (
-                      <div key={attr.name} className="space-y-2">
-                        <div className="flex justify-between text-sm">
-                          <span>{attr.name}</span>
-                          <span className="font-bold">{attr.value}</span>
+                      <TabsContent value="shooting" className="space-y-3">
+                        <div className="flex items-center gap-2 mb-4">
+                          <RatingBadge rating={player.shooting || 0} size="lg" />
+                          <span className="text-lg font-semibold">Shooting</span>
                         </div>
-                        <Progress value={attr.value} className="h-2" />
-                      </div>
-                    ))}
-                  </TabsContent>
+                        {shootingAttributes.map((attr) => (
+                          <AttributeBar key={attr.name} value={attr.value} label={attr.name} />
+                        ))}
+                      </TabsContent>
 
-                  <TabsContent value="mental" className="space-y-3">
-                    {player.attributes.mental.map((attr: any) => (
-                      <div key={attr.name} className="space-y-2">
-                        <div className="flex justify-between text-sm">
-                          <span>{attr.name}</span>
-                          <span className="font-bold">{attr.value}</span>
+                      <TabsContent value="passing" className="space-y-3">
+                        <div className="flex items-center gap-2 mb-4">
+                          <RatingBadge rating={player.passing || 0} size="lg" />
+                          <span className="text-lg font-semibold">Passing</span>
                         </div>
-                        <Progress value={attr.value} className="h-2" />
-                      </div>
-                    ))}
-                  </TabsContent>
+                        {passingAttributes.map((attr) => (
+                          <AttributeBar key={attr.name} value={attr.value} label={attr.name} />
+                        ))}
+                      </TabsContent>
+
+                      <TabsContent value="dribbling" className="space-y-3">
+                        <div className="flex items-center gap-2 mb-4">
+                          <RatingBadge rating={player.dribbling || 0} size="lg" />
+                          <span className="text-lg font-semibold">Dribbling</span>
+                        </div>
+                        {dribblingAttributes.map((attr) => (
+                          <AttributeBar key={attr.name} value={attr.value} label={attr.name} />
+                        ))}
+                      </TabsContent>
+
+                      <TabsContent value="defending" className="space-y-3">
+                        <div className="flex items-center gap-2 mb-4">
+                          <RatingBadge rating={player.defending || 0} size="lg" />
+                          <span className="text-lg font-semibold">Defending</span>
+                        </div>
+                        {defendingAttributes.map((attr) => (
+                          <AttributeBar key={attr.name} value={attr.value} label={attr.name} />
+                        ))}
+                      </TabsContent>
+
+                      <TabsContent value="physical" className="space-y-3">
+                        <div className="flex items-center gap-2 mb-4">
+                          <RatingBadge rating={player.physical || 0} size="lg" />
+                          <span className="text-lg font-semibold">Physical</span>
+                        </div>
+                        {physicalAttributes.map((attr) => (
+                          <AttributeBar key={attr.name} value={attr.value} label={attr.name} />
+                        ))}
+                      </TabsContent>
+                    </>
+                  )}
                 </Tabs>
               </CardContent>
             </Card>
@@ -484,7 +505,7 @@ export default function PlayerDetail() {
                 Update player information and attributes
               </DialogDescription>
             </DialogHeader>
-            
+
             <div className="grid gap-6 py-4">
               {/* Basic Information */}
               <div className="space-y-4">
@@ -494,45 +515,16 @@ export default function PlayerDetail() {
                     <Label htmlFor="name">Name</Label>
                     <Input
                       id="name"
-                      value={editedPlayer.name}
+                      value={editedPlayer.name || ""}
                       onChange={(e) => handleInputChange("name", e.target.value)}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="position">Position</Label>
-                    <Select
-                      value={editedPlayer.position}
-                      onValueChange={(value) => handleInputChange("position", value)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Goalkeeper">Goalkeeper</SelectItem>
-                        <SelectItem value="Defender">Defender</SelectItem>
-                        <SelectItem value="Midfielder">Midfielder</SelectItem>
-                        <SelectItem value="Forward">Forward</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="number">Number</Label>
+                    <Label htmlFor="short_name">Short Name</Label>
                     <Input
-                      id="number"
-                      type="number"
-                      value={editedPlayer.number}
-                      onChange={(e) => handleInputChange("number", parseInt(e.target.value))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="rating">Rating</Label>
-                    <Input
-                      id="rating"
-                      type="number"
-                      value={editedPlayer.rating}
-                      onChange={(e) => handleInputChange("rating", parseInt(e.target.value))}
-                      min="0"
-                      max="99"
+                      id="short_name"
+                      value={editedPlayer.short_name || ""}
+                      onChange={(e) => handleInputChange("short_name", e.target.value)}
                     />
                   </div>
                   <div className="space-y-2">
@@ -540,160 +532,61 @@ export default function PlayerDetail() {
                     <Input
                       id="age"
                       type="number"
-                      value={editedPlayer.age}
-                      onChange={(e) => handleInputChange("age", parseInt(e.target.value))}
+                      value={editedPlayer.age || ""}
+                      onChange={(e) => handleInputChange("age", parseInt(e.target.value) || null)}
                     />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="nationality">Nationality</Label>
                     <Input
                       id="nationality"
-                      value={editedPlayer.nationality}
+                      value={editedPlayer.nationality || ""}
                       onChange={(e) => handleInputChange("nationality", e.target.value)}
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="height">Height</Label>
-                    <Input
-                      id="height"
-                      value={editedPlayer.height}
-                      onChange={(e) => handleInputChange("height", e.target.value)}
-                      placeholder="e.g., 192 cm"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="weight">Weight</Label>
-                    <Input
-                      id="weight"
-                      value={editedPlayer.weight}
-                      onChange={(e) => handleInputChange("weight", e.target.value)}
-                      placeholder="e.g., 82 kg"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="foot">Preferred Foot</Label>
-                    <Select
-                      value={editedPlayer.foot}
-                      onValueChange={(value) => handleInputChange("foot", value)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Left">Left</SelectItem>
-                        <SelectItem value="Right">Right</SelectItem>
-                        <SelectItem value="Both">Both</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
                 </div>
               </div>
 
-              <Separator />
-
-              {/* Contract Information */}
+              {/* Ratings */}
               <div className="space-y-4">
-                <h3 className="font-semibold text-sm">Contract Information</h3>
+                <h3 className="font-semibold text-sm">Ratings</h3>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="value">Market Value</Label>
-                    <Input
-                      id="value"
-                      value={editedPlayer.value}
-                      onChange={(e) => handleInputChange("value", e.target.value)}
-                      placeholder="e.g., €18M"
+                    <Label>Overall Rating: {editedPlayer.overall_rating || 0}</Label>
+                    <Slider
+                      value={[editedPlayer.overall_rating || 0]}
+                      min={1}
+                      max={99}
+                      step={1}
+                      onValueChange={([value]) => handleInputChange("overall_rating", value)}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="wage">Wage</Label>
-                    <Input
-                      id="wage"
-                      value={editedPlayer.wage}
-                      onChange={(e) => handleInputChange("wage", e.target.value)}
-                      placeholder="e.g., €375K/week"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="joinDate">Join Date</Label>
-                    <Input
-                      id="joinDate"
-                      value={editedPlayer.joinDate}
-                      onChange={(e) => handleInputChange("joinDate", e.target.value)}
-                      placeholder="e.g., July 2011"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="contract">Contract Until</Label>
-                    <Input
-                      id="contract"
-                      value={editedPlayer.contract}
-                      onChange={(e) => handleInputChange("contract", e.target.value)}
-                      placeholder="e.g., June 2025"
+                    <Label>Potential Rating: {editedPlayer.potential_rating || 0}</Label>
+                    <Slider
+                      value={[editedPlayer.potential_rating || 0]}
+                      min={1}
+                      max={99}
+                      step={1}
+                      onValueChange={([value]) => handleInputChange("potential_rating", value)}
                     />
                   </div>
                 </div>
               </div>
 
-              <Separator />
-
-              {/* Physical Attributes */}
+              {/* Main Attributes */}
               <div className="space-y-4">
-                <h3 className="font-semibold text-sm">Physical Attributes</h3>
+                <h3 className="font-semibold text-sm">Main Attributes</h3>
                 <div className="grid grid-cols-2 gap-4">
-                  {editedPlayer.attributes.physical.map((attr: any, index: number) => (
-                    <div key={attr.name} className="space-y-2">
-                      <Label htmlFor={`physical-${index}`}>{attr.name}</Label>
-                      <Input
-                        id={`physical-${index}`}
-                        type="number"
-                        value={attr.value}
-                        onChange={(e) => handleAttributeChange('physical', index, parseInt(e.target.value))}
-                        min="0"
-                        max="99"
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Technical Attributes */}
-              <div className="space-y-4">
-                <h3 className="font-semibold text-sm">Technical Attributes</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  {editedPlayer.attributes.technical.map((attr: any, index: number) => (
-                    <div key={attr.name} className="space-y-2">
-                      <Label htmlFor={`technical-${index}`}>{attr.name}</Label>
-                      <Input
-                        id={`technical-${index}`}
-                        type="number"
-                        value={attr.value}
-                        onChange={(e) => handleAttributeChange('technical', index, parseInt(e.target.value))}
-                        min="0"
-                        max="99"
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Mental Attributes */}
-              <div className="space-y-4">
-                <h3 className="font-semibold text-sm">Mental Attributes</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  {editedPlayer.attributes.mental.map((attr: any, index: number) => (
-                    <div key={attr.name} className="space-y-2">
-                      <Label htmlFor={`mental-${index}`}>{attr.name}</Label>
-                      <Input
-                        id={`mental-${index}`}
-                        type="number"
-                        value={attr.value}
-                        onChange={(e) => handleAttributeChange('mental', index, parseInt(e.target.value))}
-                        min="0"
-                        max="99"
+                  {["pace", "shooting", "passing", "dribbling", "defending", "physical"].map((attr) => (
+                    <div key={attr} className="space-y-2">
+                      <Label className="capitalize">{attr}: {editedPlayer[attr as keyof Player] || 0}</Label>
+                      <Slider
+                        value={[(editedPlayer[attr as keyof Player] as number) || 0]}
+                        min={1}
+                        max={99}
+                        step={1}
+                        onValueChange={([value]) => handleInputChange(attr as keyof Player, value)}
                       />
                     </div>
                   ))}
@@ -705,7 +598,9 @@ export default function PlayerDetail() {
               <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleSaveEdit}>Save Changes</Button>
+              <Button onClick={handleSaveEdit}>
+                Save Changes
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
