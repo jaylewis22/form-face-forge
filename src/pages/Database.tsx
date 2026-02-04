@@ -28,12 +28,14 @@ import {
   FileDown,
   FileUp,
   Settings,
-  Loader2
+  Loader2,
+  Cpu
 } from "lucide-react";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { parseSquadFile, mapPlayerToDatabase } from "@/lib/fbchunksParser";
 
 export default function DatabasePage() {
   const { toast } = useToast();
@@ -378,108 +380,108 @@ export default function DatabasePage() {
           }
         });
       } else {
-        // Binary squad file - attempt to parse via edge function
+        // Binary squad file - parse client-side using FBCHUNKS parser
         setImportProgress(20);
         
-        // Read file as base64 using chunked approach to avoid stack overflow
-        const arrayBuffer = await selectedFile.arrayBuffer();
-        const uint8Array = new Uint8Array(arrayBuffer);
-        const chunkSize = 8192;
-        let base64 = '';
-        for (let i = 0; i < uint8Array.length; i += chunkSize) {
-          const chunk = uint8Array.subarray(i, i + chunkSize);
-          base64 += String.fromCharCode.apply(null, Array.from(chunk));
+        console.log('[Import] Starting client-side FBCHUNKS parsing...');
+        
+        // Parse directly in browser
+        const parseResult = await parseSquadFile(selectedFile);
+        
+        setImportProgress(50);
+        
+        console.log(`[Import] Parsed ${parseResult.players.length} players from ${parseResult.mediumChunks} MEDIUM chunks`);
+        
+        if (!parseResult.success || parseResult.players.length === 0) {
+          // Parsing failed or no players found
+          setImportValidation({
+            show: true,
+            success: false,
+            message: parseResult.error || "No player data found in file",
+            hint: parseResult.format === "fbchunks" 
+              ? "The FBCHUNKS file was parsed but no valid player records were found in the accessible chunks. Player names require decompressing LARGE chunks which needs the Oodle library."
+              : "This file does not appear to be a valid FBCHUNKS squad file.",
+            nextSteps: [
+              "Try exporting your squad to JSON format using FIFA Editor Tool (FET)",
+              "Player IDs were extracted but names require Oodle decompression",
+              "You can still import the player ratings and attributes"
+            ],
+            format: parseResult.format,
+            fileInfo: {
+              size: selectedFile.size,
+              sizeFormatted: `${(selectedFile.size / 1024 / 1024).toFixed(2)} MB`,
+            },
+            details: { players: parseResult.players.length, teams: 0, leagues: 0, competitions: 0 }
+          });
+          setImportDialogOpen(false);
+          setSelectedFile(null);
+          return;
         }
-        base64 = btoa(base64);
-        
-        setImportProgress(40);
-        
-        // Call edge function to parse binary file
-        const parseResult = await invokeEdgeFunction('parse-squad-file', {
-          fileData: base64,
-          fileName: selectedFile.name,
-          importType,
-        });
         
         setImportProgress(60);
         
-        if (!parseResult.ok) {
-          // Show user-friendly error dialog with hint and next steps
-          const payload = parseResult.payload;
-          const fileInfoData = payload.fileInfo as { size?: number; sizeFormatted?: string; header?: string } | undefined;
+        // Map parsed players to database schema
+        const mappedPlayers = parseResult.players.map(mapPlayerToDatabase);
+        console.log(`[Import] Mapped ${mappedPlayers.length} players to database schema`);
+        
+        // Show confirmation with parsed data before importing
+        toast({
+          title: `Parsed ${parseResult.players.length} players`,
+          description: `Found ${parseResult.totalChunks} chunks (${parseResult.mediumChunks} MEDIUM). Ready to import.`,
+        });
+        
+        setImportProgress(70);
+        
+        // Import to database
+        const importResult = await invokeEdgeFunction('import-database', {
+          data: { players: mappedPlayers },
+          importType,
+        });
+        
+        setImportProgress(90);
+        
+        if (!importResult.ok) {
           setImportValidation({
             show: true,
             success: false,
-            message: (payload.error as string) || "File parsing failed",
-            hint: payload.hint as string | undefined,
-            nextSteps: payload.nextSteps as string[] | undefined,
-            format: payload.format as string | undefined,
-            fileInfo: fileInfoData,
-            details: { players: 0, teams: 0, leagues: 0, competitions: 0 }
+            message: (importResult.payload.error as string) || "Import failed",
+            hint: "The players were parsed successfully but importing to database failed.",
+            details: { players: parseResult.players.length, teams: 0, leagues: 0, competitions: 0 }
           });
           setImportDialogOpen(false);
           setSelectedFile(null);
           return;
         }
         
-        // If we got parsed data, import it
-        if (parseResult.payload.success && parseResult.payload.data) {
-          const importResult = await invokeEdgeFunction('import-database', {
-            data: parseResult.payload.data,
-            importType,
-          });
-          
-          setImportProgress(90);
-          
-          if (!importResult.ok) {
-            setImportValidation({
-              show: true,
-              success: false,
-              message: (importResult.payload.error as string) || "Import failed",
-              hint: importResult.payload.hint as string | undefined,
-              nextSteps: importResult.payload.nextSteps as string[] | undefined,
-              details: { players: 0, teams: 0, leagues: 0, competitions: 0 }
-            });
-            setImportDialogOpen(false);
-            setSelectedFile(null);
-            return;
+        const results = importResult.payload.results as Record<string, { inserted?: number }> | undefined;
+        const playerCount = results?.players?.inserted || parseResult.players.length;
+        
+        // Refresh stats after import
+        await fetchDatabaseStats();
+        
+        // Show success
+        setImportValidation({
+          show: true,
+          success: true,
+          message: `FBCHUNKS import completed!`,
+          hint: `Extracted player data directly from binary file (${parseResult.mediumChunks} MEDIUM chunks parsed)`,
+          format: "fbchunks",
+          fileInfo: {
+            size: selectedFile.size,
+            sizeFormatted: `${(selectedFile.size / 1024 / 1024).toFixed(2)} MB`,
+          },
+          details: {
+            players: playerCount,
+            teams: 0,
+            leagues: 0,
+            competitions: 0,
           }
-          
-          const results = importResult.payload.results as Record<string, { inserted?: number }> | undefined;
-          const playerCount = results?.players?.inserted || 0;
-          const teamCount = results?.teams?.inserted || 0;
-          const leagueCount = results?.leagues?.inserted || 0;
-          const competitionCount = results?.competitions?.inserted || 0;
-          
-          // Refresh stats after import
-          await fetchDatabaseStats();
-          
-          // Show validation dialog
-          setImportValidation({
-            show: true,
-            success: true,
-            message: `Import completed successfully!`,
-            details: {
-              players: playerCount,
-              teams: teamCount,
-              leagues: leagueCount,
-              competitions: competitionCount,
-            }
-          });
-        } else {
-          // Parsing returned success but no data - show as error
-          setImportValidation({
-            show: true,
-            success: false,
-            message: (parseResult.payload.error as string) || "No data found in file",
-            hint: parseResult.payload.hint as string | undefined,
-            nextSteps: parseResult.payload.nextSteps as string[] | undefined,
-            details: { players: 0, teams: 0, leagues: 0, competitions: 0 }
-          });
-          setImportDialogOpen(false);
-          setSelectedFile(null);
-          return;
-        }
+        });
+        
+        setImportProgress(100);
+        setImportDialogOpen(false);
+        setSelectedFile(null);
+        return;
       }
       
       setImportProgress(100);
