@@ -184,16 +184,87 @@ export class FBCHUNKSParser {
   }
 
   /**
-   * Parse chunk directory starting at offset 0x1530
+   * Parse chunk directory - scan header for chunk table location
    */
   private parseChunkDirectory(): Chunk[] {
     const chunks: Chunk[] = [];
-    const DIR_OFFSET = 0x1530;
+    
+    // FBCHUNKS header structure:
+    // 0x00-0x07: "FBCHUNKS" magic
+    // 0x08-0x0B: Version/flags
+    // 0x0C-0x0F: Total file size or chunk count
+    // 0x10+: Variable header data, chunk directory location varies
+    
+    // Try to find chunk count from header
+    let chunkCount = 0;
+    let dirOffset = 0;
+    
+    // Method 1: Check common header positions for chunk count
+    if (this.buffer.byteLength >= 0x20) {
+      // Try offset 0x0C (common location for count)
+      const potentialCount1 = this.view.getUint32(0x0C, true);
+      // Try offset 0x10
+      const potentialCount2 = this.view.getUint32(0x10, true);
+      // Try offset 0x14
+      const potentialCount3 = this.view.getUint32(0x14, true);
+      
+      // Use reasonable count (1-1000 chunks expected)
+      if (potentialCount1 > 0 && potentialCount1 < 1000) {
+        chunkCount = potentialCount1;
+        dirOffset = 0x18; // Directory likely starts after this
+      } else if (potentialCount2 > 0 && potentialCount2 < 1000) {
+        chunkCount = potentialCount2;
+        dirOffset = 0x20;
+      } else if (potentialCount3 > 0 && potentialCount3 < 1000) {
+        chunkCount = potentialCount3;
+        dirOffset = 0x20;
+      }
+    }
+    
+    console.log(`[FBCHUNKSParser] Header analysis: potentialChunkCount=${chunkCount}, dirOffset=0x${dirOffset.toString(16)}`);
+    
+    // Method 2: Scan for chunk directory by looking for valid offset patterns
+    // Chunk entries typically have: [flags, offset, uncompressed_size, compressed_size]
+    if (chunkCount === 0 || dirOffset === 0) {
+      // Scan the first 32KB for directory-like patterns
+      const SCAN_LIMIT = Math.min(0x8000, this.buffer.byteLength);
+      const ENTRY_SIZE = 16;
+      
+      for (let pos = 0x10; pos < SCAN_LIMIT - ENTRY_SIZE * 10; pos += 4) {
+        // Check if this looks like a chunk directory start
+        let validEntries = 0;
+        for (let i = 0; i < 10 && pos + (i + 1) * ENTRY_SIZE <= this.buffer.byteLength; i++) {
+          const entryPos = pos + i * ENTRY_SIZE;
+          const offset = this.view.getUint32(entryPos + 4, true);
+          const size = this.view.getUint32(entryPos + 8, true);
+          
+          // Valid chunk: offset > header, size reasonable, within file bounds
+          if (offset >= 0x1000 && offset < this.buffer.byteLength && 
+              size > 0 && size < 0x100000 && offset + size <= this.buffer.byteLength) {
+            validEntries++;
+          }
+        }
+        
+        if (validEntries >= 5) {
+          dirOffset = pos;
+          console.log(`[FBCHUNKSParser] Found likely chunk directory at 0x${pos.toString(16)} (${validEntries} valid entries)`);
+          break;
+        }
+      }
+    }
+    
+    // If still no directory found, fall back to original fixed offset
+    if (dirOffset === 0) {
+      dirOffset = 0x1530;
+      console.log(`[FBCHUNKSParser] Using fallback directory offset 0x${dirOffset.toString(16)}`);
+    }
+    
+    // Parse chunk directory entries
     const MAX_CHUNKS = 600;
     const ENTRY_SIZE = 16;
 
     for (let i = 0; i < MAX_CHUNKS; i++) {
-      const entryOffset = DIR_OFFSET + i * ENTRY_SIZE;
+      const entryOffset = dirOffset + i * ENTRY_SIZE;
       
       if (entryOffset + ENTRY_SIZE > this.buffer.byteLength) break;
 
@@ -201,6 +272,9 @@ export class FBCHUNKSParser {
         const chunkOffset = this.view.getUint32(entryOffset + 4, true);
         const chunkSize = this.view.getUint32(entryOffset + 8, true);
         const compressedSize = this.view.getUint32(entryOffset + 12, true);
+
+        // Stop at first null/invalid entry
+        if (chunkOffset === 0 && chunkSize === 0) break;
 
         // Validate chunk bounds
         if (
@@ -221,7 +295,47 @@ export class FBCHUNKSParser {
         // Skip invalid entries
       }
     }
+    
+    // Method 3: If directory parsing failed, scan file for player data directly
+    if (chunks.length === 0) {
+      console.log('[FBCHUNKSParser] Directory parsing failed, scanning for player data patterns...');
+      return this.scanForPlayerChunks();
+    }
 
+    return chunks;
+  }
+  
+  /**
+   * Scan file for player data patterns when directory parsing fails
+   */
+  private scanForPlayerChunks(): Chunk[] {
+    const chunks: Chunk[] = [];
+    const SCAN_STEP = 0x1000; // 4KB steps
+    const MARKER = [0xdf, 0x00];
+    
+    // Look for regions with DF 00 markers (player record delimiters)
+    for (let pos = 0x1000; pos < this.buffer.byteLength - 0x1000; pos += SCAN_STEP) {
+      const region = this.bytes.slice(pos, Math.min(pos + 0x2000, this.buffer.byteLength));
+      let markerCount = 0;
+      
+      for (let i = 0; i < region.length - 1; i++) {
+        if (region[i] === MARKER[0] && region[i + 1] === MARKER[1]) {
+          markerCount++;
+        }
+      }
+      
+      // If this region has multiple DF 00 markers, it likely contains player data
+      if (markerCount >= 3) {
+        chunks.push({
+          index: chunks.length,
+          offset: pos,
+          size: 0x2000, // Scan 8KB region
+          isCompressed: false,
+        });
+        console.log(`[FBCHUNKSParser] Found player data region at 0x${pos.toString(16)} (${markerCount} markers)`);
+      }
+    }
+    
     return chunks;
   }
 
