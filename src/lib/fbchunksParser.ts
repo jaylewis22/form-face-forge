@@ -4,6 +4,8 @@
  * Extracts player data from MEDIUM chunks (no Oodle required).
  */
 
+import { type PlayerNameMap } from './playerNameMapping';
+
 export interface ParsedPlayer {
   playerid: number;
   overallrating: number;
@@ -738,8 +740,13 @@ export async function parseSquadFile(
 
 /**
  * Map parsed player to database schema
+ * @param player - The parsed player record
+ * @param nameMap - Optional PlayerNameMap for real player names
  */
-export function mapPlayerToDatabase(player: ParsedPlayer): Record<string, unknown> {
+export function mapPlayerToDatabase(
+  player: ParsedPlayer, 
+  nameMap?: PlayerNameMap
+): Record<string, unknown> {
   // Map position codes to position strings
   const positionMap: Record<number, string> = {
     0: "GK",
@@ -777,9 +784,13 @@ export function mapPlayerToDatabase(player: ParsedPlayer): Record<string, unknow
     2: "Left",
   };
 
+  // Get player name from mapping or use placeholder
+  const nameEntry = nameMap?.names.get(player.playerid);
+  const playerName = nameEntry?.fullname || `Player_${player.playerid}`;
+
   return {
     id: player.playerid,
-    name: `Player_${player.playerid}`, // Name needs to come from separate name table
+    name: playerName,
     overall_rating: player.overallrating,
     potential_rating: player.potential,
     age: player.age,
