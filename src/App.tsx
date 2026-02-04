@@ -19,6 +19,7 @@ import ScheduleEditor from "./pages/ScheduleEditor";
 import Kits from "./pages/Kits";
 import Profile from "./pages/Profile";
 import FET from "./pages/FET";
+import SchemaExplorer from "./pages/SchemaExplorer";
 
 const queryClient = new QueryClient();
 
@@ -44,6 +45,7 @@ const App = () => (
           <Route path="/database" element={<DatabasePage />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/fet" element={<FET />} />
+          <Route path="/schema" element={<SchemaExplorer />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
