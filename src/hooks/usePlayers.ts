@@ -21,13 +21,53 @@ export interface Player {
   team_id: number | null;
   wage: number | null;
   team_name?: string | null;
-  // Attributes
+  // Main attributes
   pace: number | null;
   shooting: number | null;
   passing: number | null;
   dribbling: number | null;
   defending: number | null;
   physical: number | null;
+  // Pace sub-attributes
+  acceleration: number | null;
+  sprint_speed: number | null;
+  // Shooting sub-attributes
+  positioning: number | null;
+  finishing: number | null;
+  shot_power: number | null;
+  long_shots: number | null;
+  volleys: number | null;
+  penalties: number | null;
+  // Passing sub-attributes
+  vision: number | null;
+  crossing: number | null;
+  free_kick_accuracy: number | null;
+  short_passing: number | null;
+  long_passing: number | null;
+  curve: number | null;
+  // Dribbling sub-attributes
+  agility: number | null;
+  balance: number | null;
+  reactions: number | null;
+  ball_control: number | null;
+  composure: number | null;
+  // Defending sub-attributes
+  interceptions: number | null;
+  heading_accuracy: number | null;
+  def_awareness: number | null;
+  standing_tackle: number | null;
+  sliding_tackle: number | null;
+  // Physical sub-attributes
+  jumping: number | null;
+  stamina: number | null;
+  strength: number | null;
+  aggression: number | null;
+  // GK attributes
+  gk_diving: number | null;
+  gk_handling: number | null;
+  gk_kicking: number | null;
+  gk_positioning: number | null;
+  gk_reflexes: number | null;
 }
 
 export function usePlayers(limit?: number) {
