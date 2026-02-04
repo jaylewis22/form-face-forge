@@ -40,6 +40,9 @@ interface PlayerNameIds {
 
 /**
  * Find name tables in the database
+ * Priority order:
+ * 1. work_playernames (EA FC native format)
+ * 2. dcplayernames, playernames, etc. (FET export formats)
  */
 function findNameTables(db: SqlJsDatabase): NameTableInfo[] {
   const tables: NameTableInfo[] = [];
@@ -50,8 +53,9 @@ function findNameTables(db: SqlJsDatabase): NameTableInfo[] {
   
   const tableNames = result[0].values.map(row => String(row[0]));
   
-  // Look for tables that might contain names
+  // Priority-ordered table patterns (work_playernames is preferred)
   const namePatterns = [
+    /^work_playernames$/i,    // EA FC native (highest priority)
     /^dcplayernames/i,
     /^playernames/i,
     /^editedplayernames/i,
@@ -59,32 +63,61 @@ function findNameTables(db: SqlJsDatabase): NameTableInfo[] {
     /language.*name/i,
   ];
   
+  // Sort tables by priority
+  const sortedTables: { tableName: string; priority: number }[] = [];
+  
   for (const tableName of tableNames) {
-    for (const pattern of namePatterns) {
-      if (pattern.test(tableName)) {
-        // Check table structure
-        const pragma = db.exec(`PRAGMA table_info(${tableName})`);
-        if (pragma.length > 0) {
-          const columns = pragma[0].values.map(row => String(row[1]).toLowerCase());
-          
-          // Find name and ID columns
-          const nameCol = columns.find(c => c === 'name' || c === 'commonname' || c === 'playername');
-          const idCol = columns.find(c => c === 'nameid' || c === 'id' || c === 'playerid');
-          
-          if (nameCol && idCol) {
-            tables.push({
-              tableName,
-              nameColumn: nameCol,
-              idColumn: idCol,
-            });
-          }
-        }
+    for (let i = 0; i < namePatterns.length; i++) {
+      if (namePatterns[i].test(tableName)) {
+        sortedTables.push({ tableName, priority: i });
         break;
       }
     }
   }
   
+  // Sort by priority (lower = better)
+  sortedTables.sort((a, b) => a.priority - b.priority);
+  
+  for (const { tableName } of sortedTables) {
+    // Check table structure
+    const pragma = db.exec(`PRAGMA table_info("${tableName.replace(/"/g, '""')}")`);
+    if (pragma.length > 0) {
+      const columns = pragma[0].values.map(row => String(row[1]).toLowerCase());
+      
+      // Find name and ID columns (nameid is the standard for work_playernames)
+      const nameCol = columns.find(c => c === 'name' || c === 'commonname' || c === 'playername');
+      const idCol = columns.find(c => c === 'nameid' || c === 'id' || c === 'playerid');
+      
+      if (nameCol && idCol) {
+        tables.push({
+          tableName,
+          nameColumn: nameCol,
+          idColumn: idCol,
+        });
+        console.log(`[SQLiteParser] Found name table: ${tableName} (id: ${idCol}, name: ${nameCol})`);
+      }
+    }
+  }
+  
   return tables;
+}
+
+/**
+ * Check if a name value is valid (not empty, 'nan', etc.)
+ * Based on server logic that filters out invalid names
+ */
+function isValidName(value: unknown): boolean {
+  if (value == null) return false;
+  const str = String(value).trim().toLowerCase();
+  return str !== '' && str !== 'nan' && str !== 'null' && str !== 'undefined';
+}
+
+/**
+ * Clean a name value (trim whitespace, filter invalid values)
+ */
+function cleanName(value: unknown): string | undefined {
+  if (!isValidName(value)) return undefined;
+  return String(value).trim();
 }
 
 /**
@@ -94,16 +127,22 @@ function buildNameLookup(db: SqlJsDatabase, nameTable: NameTableInfo): Map<numbe
   const lookup = new Map<number, string>();
   
   try {
-    const result = db.exec(`SELECT ${nameTable.idColumn}, ${nameTable.nameColumn} FROM ${nameTable.tableName}`);
+    // Use properly quoted identifiers
+    const idCol = `"${nameTable.idColumn.replace(/"/g, '""')}"`;
+    const nameCol = `"${nameTable.nameColumn.replace(/"/g, '""')}"`;
+    const tableName = `"${nameTable.tableName.replace(/"/g, '""')}"`;
+    
+    const result = db.exec(`SELECT ${idCol}, ${nameCol} FROM ${tableName}`);
     if (result.length > 0) {
       for (const row of result[0].values) {
         const id = Number(row[0]);
-        const name = String(row[1] || '').trim();
+        const name = cleanName(row[1]);
         if (id > 0 && name) {
           lookup.set(id, name);
         }
       }
     }
+    console.log(`[SQLiteParser] Built lookup with ${lookup.size} names from ${nameTable.tableName}`);
   } catch (e) {
     console.warn(`[SQLiteParser] Error reading ${nameTable.tableName}:`, e);
   }
@@ -117,36 +156,54 @@ function buildNameLookup(db: SqlJsDatabase, nameTable: NameTableInfo): Map<numbe
 function getPlayerNameIds(db: SqlJsDatabase): PlayerNameIds[] {
   const players: PlayerNameIds[] = [];
   
-  // Try different player table names
+  // Try different player table names (work_players is EA FC native)
   const playerTables = ['work_players', 'players', 'dcplayers', 'player'];
   
   for (const tableName of playerTables) {
     try {
-      // Check if table exists
-      const exists = db.exec(`SELECT name FROM sqlite_master WHERE type='table' AND name='${tableName}'`);
+      // Check if table exists (properly escaped)
+      const exists = db.exec(`SELECT name FROM sqlite_master WHERE type='table' AND name='${tableName.replace(/'/g, "''")}'`);
       if (exists.length === 0 || exists[0].values.length === 0) continue;
       
       // Get column info
-      const pragma = db.exec(`PRAGMA table_info(${tableName})`);
+      const pragma = db.exec(`PRAGMA table_info("${tableName.replace(/"/g, '""')}")`);
       if (pragma.length === 0) continue;
       
       const columns = pragma[0].values.map(row => String(row[1]).toLowerCase());
+      const originalColumns = pragma[0].values.map(row => String(row[1]));
+      
+      // Helper to find column (case-insensitive) and return original name
+      const findCol = (names: string[]): string | undefined => {
+        for (const name of names) {
+          const idx = columns.indexOf(name.toLowerCase());
+          if (idx !== -1) return originalColumns[idx];
+        }
+        return undefined;
+      };
       
       // Check for required columns
-      const playeridCol = columns.find(c => c === 'playerid' || c === 'id');
-      const commonnameCol = columns.find(c => c === 'commonnameid');
-      const firstnameCol = columns.find(c => c === 'firstnameid');
-      const lastnameCol = columns.find(c => c === 'lastnameid');
+      const playeridCol = findCol(['playerid', 'id']);
+      const commonnameCol = findCol(['commonnameid']);
+      const firstnameCol = findCol(['firstnameid']);
+      const lastnameCol = findCol(['lastnameid']);
       
       if (!playeridCol) continue;
       
-      // Build query
+      console.log(`[SQLiteParser] Found player table: ${tableName} with columns:`, {
+        playerid: playeridCol,
+        commonnameid: commonnameCol,
+        firstnameid: firstnameCol,
+        lastnameid: lastnameCol,
+      });
+      
+      // Build query with properly quoted identifiers
       const selectCols = [playeridCol];
       if (commonnameCol) selectCols.push(commonnameCol);
       if (firstnameCol) selectCols.push(firstnameCol);
       if (lastnameCol) selectCols.push(lastnameCol);
       
-      const result = db.exec(`SELECT ${selectCols.join(', ')} FROM ${tableName}`);
+      const quotedCols = selectCols.map(c => `"${c.replace(/"/g, '""')}"`);
+      const result = db.exec(`SELECT ${quotedCols.join(', ')} FROM "${tableName.replace(/"/g, '""')}"`);
       if (result.length === 0) continue;
       
       const colIndexes = {
@@ -188,18 +245,30 @@ function tryDirectNameTable(db: SqlJsDatabase): PlayerNameMap | null {
   
   for (const tableName of directTables) {
     try {
-      const exists = db.exec(`SELECT name FROM sqlite_master WHERE type='table' AND name='${tableName}'`);
+      const escapedName = tableName.replace(/'/g, "''");
+      const exists = db.exec(`SELECT name FROM sqlite_master WHERE type='table' AND name='${escapedName}'`);
       if (exists.length === 0 || exists[0].values.length === 0) continue;
       
-      const pragma = db.exec(`PRAGMA table_info(${tableName})`);
+      const quotedTable = `"${tableName.replace(/"/g, '""')}"`;
+      const pragma = db.exec(`PRAGMA table_info(${quotedTable})`);
       if (pragma.length === 0) continue;
       
       const columns = pragma[0].values.map(row => String(row[1]).toLowerCase());
+      const originalColumns = pragma[0].values.map(row => String(row[1]));
       
-      const playeridCol = columns.find(c => c === 'playerid');
-      const firstnameCol = columns.find(c => c === 'firstname');
-      const surnameCol = columns.find(c => c === 'surname');
-      const commonnameCol = columns.find(c => c === 'commonname');
+      // Helper to find column and return original name
+      const findCol = (names: string[]): string | undefined => {
+        for (const name of names) {
+          const idx = columns.indexOf(name.toLowerCase());
+          if (idx !== -1) return originalColumns[idx];
+        }
+        return undefined;
+      };
+      
+      const playeridCol = findCol(['playerid']);
+      const firstnameCol = findCol(['firstname']);
+      const surnameCol = findCol(['surname']);
+      const commonnameCol = findCol(['commonname']);
       
       if (!playeridCol) continue;
       
@@ -208,7 +277,8 @@ function tryDirectNameTable(db: SqlJsDatabase): PlayerNameMap | null {
       if (surnameCol) selectCols.push(surnameCol);
       if (commonnameCol) selectCols.push(commonnameCol);
       
-      const result = db.exec(`SELECT ${selectCols.join(', ')} FROM ${tableName}`);
+      const quotedCols = selectCols.map(c => `"${c.replace(/"/g, '""')}"`);
+      const result = db.exec(`SELECT ${quotedCols.join(', ')} FROM ${quotedTable}`);
       if (result.length === 0 || result[0].values.length === 0) continue;
       
       const names = new Map<number, PlayerName>();
@@ -224,11 +294,11 @@ function tryDirectNameTable(db: SqlJsDatabase): PlayerNameMap | null {
         const playerid = Number(row[indexes.playerid]);
         if (playerid <= 0) continue;
         
-        const firstname = indexes.firstname >= 0 ? String(row[indexes.firstname] || '').trim() : undefined;
-        const surname = indexes.surname >= 0 ? String(row[indexes.surname] || '').trim() : undefined;
-        const commonname = indexes.commonname >= 0 ? String(row[indexes.commonname] || '').trim() : undefined;
+        const firstname = cleanName(row[indexes.firstname]);
+        const surname = cleanName(row[indexes.surname]);
+        const commonname = cleanName(row[indexes.commonname]);
         
-        // Build fullname
+        // Build fullname (prioritize commonname like the server does)
         let fullname: string | undefined;
         if (commonname) {
           fullname = commonname;
@@ -243,9 +313,9 @@ function tryDirectNameTable(db: SqlJsDatabase): PlayerNameMap | null {
         if (fullname) {
           names.set(playerid, {
             playerid,
-            firstname: firstname || undefined,
-            surname: surname || undefined,
-            commonname: commonname || undefined,
+            firstname,
+            surname,
+            commonname,
             fullname,
           });
         }
