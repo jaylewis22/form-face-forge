@@ -1,9 +1,9 @@
 /**
  * Schema Explorer Page
- * Load and explore SQLite database schemas (compdata_local.sqlite, etc.)
+ * Load and explore SQLite database schemas via backend API
  */
 
-import { useState, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { AppLayout } from '@/components/Layout/AppLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,14 +11,12 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { 
   Database, 
-  Upload, 
-  FileUp, 
   Loader2, 
-  CheckCircle, 
   XCircle,
   Table2,
   Link,
   Layers,
+  RefreshCw,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { SchemaNavigator } from '@/components/Schema/SchemaNavigator';
@@ -30,43 +28,26 @@ import {
   getLoadedFileName,
   type LoadedSchema,
 } from '@/lib/sqliteSchemaParser';
-import { detectSqlite } from '@/lib/sqliteNameParser';
 
 export default function SchemaExplorer() {
   const { toast } = useToast();
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [schema, setSchema] = useState<LoadedSchema | null>(getCurrentSchema());
   const [fileName, setFileName] = useState<string | null>(getLoadedFileName());
   const [error, setError] = useState<string | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
 
-  const handleFileSelect = async (file: File) => {
+  const loadSchema = async () => {
     setError(null);
-    
-    // Validate file type
-    const isSqlite = await detectSqlite(file);
-    if (!isSqlite) {
-      setError('Not a valid SQLite database. Please select a .sqlite, .db, or .sqlite3 file.');
-      return;
-    }
-    
-    // Check file size
-    if (file.size > 500 * 1024 * 1024) {
-      setError('File too large. Maximum size is 500MB.');
-      return;
-    }
-    
     setIsLoading(true);
     
     try {
-      const loadedSchema = await loadSqliteSchema(file);
+      const loadedSchema = await loadSqliteSchema();
       setSchema(loadedSchema);
-      setFileName(file.name);
+      setFileName(getLoadedFileName());
       
       toast({
         title: 'Schema Loaded',
-        description: `Found ${loadedSchema.tables.size} tables with ${loadedSchema.graph.edges.length} relationships`,
+        description: `Found ${loadedSchema.tables.size} tables`,
       });
     } catch (err) {
       console.error('Schema load error:', err);
@@ -76,31 +57,17 @@ export default function SchemaExplorer() {
     }
   };
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    
-    const file = e.dataTransfer.files[0];
-    if (file) {
-      handleFileSelect(file);
+  // Auto-load on mount if not already loaded
+  useEffect(() => {
+    if (!isSchemaLoaded()) {
+      loadSchema();
     }
-  };
+  }, []);
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-  };
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      handleFileSelect(file);
-    }
+  const handleRefresh = () => {
+    closeSqliteSchema();
+    setSchema(null);
+    loadSchema();
   };
 
   const handleClose = () => {
@@ -128,7 +95,7 @@ export default function SchemaExplorer() {
               Schema Explorer
             </h1>
             <p className="text-muted-foreground mt-1">
-              Load and explore SQLite database schemas for mapping and export
+              Explore database schema for mapping and export
             </p>
           </div>
           
@@ -137,9 +104,9 @@ export default function SchemaExplorer() {
               <Badge variant="outline" className="text-sm">
                 {fileName}
               </Badge>
-              <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
-                <FileUp className="h-4 w-4 mr-2" />
-                Load Different
+              <Button variant="outline" onClick={handleRefresh}>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Refresh
               </Button>
               <Button variant="ghost" onClick={handleClose}>
                 Close
@@ -156,79 +123,41 @@ export default function SchemaExplorer() {
           </Alert>
         )}
 
-        {/* File Upload or Schema Navigator */}
-        {!schema ? (
+        {/* Loading State */}
+        {isLoading && !schema && (
           <Card>
-            <CardHeader>
-              <CardTitle>Load SQLite Database</CardTitle>
-              <CardDescription>
-                Upload a compdata_local.sqlite or other EA FC database file to explore its schema
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div
-                onDrop={handleDrop}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onClick={() => fileInputRef.current?.click()}
-                className={`
-                  border-2 border-dashed rounded-lg p-12 text-center cursor-pointer
-                  transition-colors
-                  ${isDragging 
-                    ? 'border-primary bg-primary/5' 
-                    : 'border-muted-foreground/25 hover:border-primary/50 hover:bg-muted/50'
-                  }
-                `}
-              >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".sqlite,.db,.sqlite3"
-                  onChange={handleInputChange}
-                  className="hidden"
-                />
-                
-                {isLoading ? (
-                  <div className="flex flex-col items-center gap-4">
-                    <Loader2 className="h-12 w-12 animate-spin text-primary" />
-                    <p className="text-lg font-medium">Loading schema...</p>
-                    <p className="text-sm text-muted-foreground">
-                      Analyzing tables, columns, and relationships
-                    </p>
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center gap-4">
-                    <Upload className="h-12 w-12 text-muted-foreground" />
-                    <div>
-                      <p className="text-lg font-medium">
-                        Drop SQLite file here or click to browse
-                      </p>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Supports .sqlite, .db, .sqlite3 files up to 500MB
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-              
-              {/* Supported files */}
-              <div className="mt-6 grid grid-cols-3 gap-4 text-sm">
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <CheckCircle className="h-4 w-4 text-green-500" />
-                  compdata_local.sqlite
-                </div>
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <CheckCircle className="h-4 w-4 text-green-500" />
-                  FET database exports
-                </div>
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <CheckCircle className="h-4 w-4 text-green-500" />
-                  Custom SQLite databases
-                </div>
+            <CardContent className="py-12">
+              <div className="flex flex-col items-center gap-4">
+                <Loader2 className="h-12 w-12 animate-spin text-primary" />
+                <p className="text-lg font-medium">Loading schema from API...</p>
+                <p className="text-sm text-muted-foreground">
+                  Fetching tables, columns, and relationships
+                </p>
               </div>
             </CardContent>
           </Card>
-        ) : (
+        )}
+
+        {/* No Schema & Not Loading */}
+        {!schema && !isLoading && (
+          <Card>
+            <CardHeader>
+              <CardTitle>No Schema Loaded</CardTitle>
+              <CardDescription>
+                Click the button below to load the database schema from the API
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button onClick={loadSchema}>
+                <Database className="h-4 w-4 mr-2" />
+                Load Schema
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Schema Loaded */}
+        {schema && (
           <>
             {/* Stats Summary */}
             {stats && (

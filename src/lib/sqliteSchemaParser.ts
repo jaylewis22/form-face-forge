@@ -1,25 +1,6 @@
-/**
- * SQLite Schema Parser
- * Introspects loaded SQLite databases to extract schema metadata:
- * - Tables (with raw/work pairing detection)
- * - Columns (name, type, nullable, primary key)
- * - Foreign keys
- * - Row counts
- * - Entity groupings (players, teams, leagues, nations)
+/* SQLite Schema Parser - API-Based Version
+ * Fetches schema metadata from the backend API instead of loading SQL.js
  */
-
-import initSqlJs, { type Database as SqlJsDatabase, type SqlJsStatic } from 'sql.js';
-
-let SQL: SqlJsStatic | null = null;
-
-async function initSQL(): Promise<SqlJsStatic> {
-  if (!SQL) {
-    SQL = await initSqlJs({
-      locateFile: (file) => `https://sql.js.org/dist/${file}`,
-    });
-  }
-  return SQL;
-}
 
 // ============ Types ============
 
@@ -52,7 +33,7 @@ export interface TableInfo {
   rowCount: number;
   group: TableGroup;
   variant: 'raw' | 'work' | 'app' | 'meta';
-  pairedTable: string | null; // raw_X <-> work_X pairing
+  pairedTable: string | null;
 }
 
 export interface TableSummary {
@@ -84,7 +65,7 @@ export interface SchemaGraph {
 export interface LoadedSchema {
   tables: Map<string, TableInfo>;
   groups: Map<TableGroup, string[]>;
-  pairs: Map<string, string>; // raw_X -> work_X or vice versa
+  pairs: Map<string, string>;
   graph: SchemaGraph;
 }
 
@@ -143,287 +124,89 @@ function findPairedTable(tableName: string, allTables: string[]): string | null 
   return null;
 }
 
-// ============ Schema Extraction ============
+// ============ State Management ============
 
-function getTableColumns(db: SqlJsDatabase, tableName: string): ColumnInfo[] {
-  const columns: ColumnInfo[] = [];
-  
-  try {
-    const quoted = `"${tableName.replace(/"/g, '""')}"`;
-    const result = db.exec(`PRAGMA table_info(${quoted})`);
-    
-    if (result.length > 0) {
-      for (const row of result[0].values) {
-        columns.push({
-          name: String(row[1]),
-          type: String(row[2]) || 'TEXT',
-          nullable: row[3] === 0,
-          primaryKey: row[5] === 1,
-          defaultValue: row[4] != null ? String(row[4]) : null,
-        });
-      }
-    }
-  } catch (e) {
-    console.warn(`[SchemaParser] Error reading columns for ${tableName}:`, e);
-  }
-  
-  return columns;
+let cachedSchema: LoadedSchema | null = null;
+let cachedSamples: Map<string, Record<string, unknown>[]> = new Map();
+
+// ============ API Calls ============
+
+async function fetchTableList(): Promise<string[]> {
+  const response = await fetch('/api/tables');
+  if (!response.ok) throw new Error('Failed to fetch tables');
+  return response.json();
 }
 
-function getTableForeignKeys(db: SqlJsDatabase, tableName: string): ForeignKey[] {
-  const fks: ForeignKey[] = [];
-  
-  try {
-    const quoted = `"${tableName.replace(/"/g, '""')}"`;
-    const result = db.exec(`PRAGMA foreign_key_list(${quoted})`);
-    
-    if (result.length > 0) {
-      for (const row of result[0].values) {
-        fks.push({
-          toTable: String(row[2]),
-          fromColumn: String(row[3]),
-          toColumn: String(row[4]),
-        });
-      }
-    }
-  } catch (e) {
-    console.warn(`[SchemaParser] Error reading FKs for ${tableName}:`, e);
-  }
-  
-  return fks;
-}
-
-function getTableIndexes(db: SqlJsDatabase, tableName: string): IndexInfo[] {
-  const indexes: IndexInfo[] = [];
-  
-  try {
-    const quoted = `"${tableName.replace(/"/g, '""')}"`;
-    const result = db.exec(`PRAGMA index_list(${quoted})`);
-    
-    if (result.length > 0) {
-      for (const row of result[0].values) {
-        const indexName = String(row[1]);
-        const unique = row[2] === 1;
-        
-        // Get columns in this index
-        const colResult = db.exec(`PRAGMA index_info("${indexName.replace(/"/g, '""')}")`);
-        const columns: string[] = [];
-        
-        if (colResult.length > 0) {
-          for (const colRow of colResult[0].values) {
-            columns.push(String(colRow[2]));
-          }
-        }
-        
-        if (columns.length > 0) {
-          indexes.push({ name: indexName, columns, unique });
-        }
-      }
-    }
-  } catch (e) {
-    console.warn(`[SchemaParser] Error reading indexes for ${tableName}:`, e);
-  }
-  
-  return indexes;
-}
-
-function getTableRowCount(db: SqlJsDatabase, tableName: string): number {
-  try {
-    const quoted = `"${tableName.replace(/"/g, '""')}"`;
-    const result = db.exec(`SELECT COUNT(*) FROM ${quoted}`);
-    
-    if (result.length > 0 && result[0].values.length > 0) {
-      return Number(result[0].values[0][0]) || 0;
-    }
-  } catch (e) {
-    console.warn(`[SchemaParser] Error counting rows for ${tableName}:`, e);
-  }
-  
-  return 0;
-}
-
-function getAllTableNames(db: SqlJsDatabase): string[] {
-  const result = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'");
-  
-  if (result.length === 0) return [];
-  return result[0].values.map(row => String(row[0]));
-}
-
-function getSampleRows(db: SqlJsDatabase, tableName: string, limit = 3): Record<string, unknown>[] {
-  const rows: Record<string, unknown>[] = [];
-  
-  try {
-    const quoted = `"${tableName.replace(/"/g, '""')}"`;
-    const result = db.exec(`SELECT * FROM ${quoted} LIMIT ${limit}`);
-    
-    if (result.length > 0 && result[0].values.length > 0) {
-      const columns = result[0].columns;
-      
-      for (const row of result[0].values) {
-        const obj: Record<string, unknown> = {};
-        columns.forEach((col, idx) => {
-          obj[col] = row[idx];
-        });
-        rows.push(obj);
-      }
-    }
-  } catch (e) {
-    console.warn(`[SchemaParser] Error getting sample rows for ${tableName}:`, e);
-  }
-  
-  return rows;
-}
-
-// ============ Relationship Inference ============
-
-/**
- * Infer relationships based on naming conventions when explicit FKs aren't defined
- */
-function inferRelationships(tables: Map<string, TableInfo>): ForeignKey[] {
-  const inferred: ForeignKey[] = [];
-  const tableNames = Array.from(tables.keys());
-  
-  // Common ID column patterns -> target table
-  const idPatterns: { pattern: RegExp; targetSuffix: string }[] = [
-    { pattern: /^playerid$/i, targetSuffix: 'players' },
-    { pattern: /^teamid$/i, targetSuffix: 'teams' },
-    { pattern: /^leagueid$/i, targetSuffix: 'leagues' },
-    { pattern: /^nationid$/i, targetSuffix: 'nations' },
-    { pattern: /^stadiumid$/i, targetSuffix: 'stadiums' },
-    { pattern: /^formationid$/i, targetSuffix: 'formations' },
-    { pattern: /^kitid$/i, targetSuffix: 'kits' },
-    { pattern: /^nameid$/i, targetSuffix: 'playernames' },
-    { pattern: /^commonnameid$/i, targetSuffix: 'playernames' },
-    { pattern: /^firstnameid$/i, targetSuffix: 'playernames' },
-    { pattern: /^lastnameid$/i, targetSuffix: 'playernames' },
-  ];
-  
-  for (const [tableName, tableInfo] of tables) {
-    const prefix = tableName.match(/^(raw_|work_)/i)?.[0] || '';
-    
-    for (const column of tableInfo.columns) {
-      for (const { pattern, targetSuffix } of idPatterns) {
-        if (pattern.test(column.name)) {
-          // Look for matching target table with same prefix
-          const targetWithPrefix = prefix + targetSuffix;
-          const targetTable = tableNames.find(
-            t => t.toLowerCase() === targetWithPrefix.toLowerCase() ||
-                 t.toLowerCase() === targetSuffix.toLowerCase()
-          );
-          
-          if (targetTable && targetTable !== tableName) {
-            // Find the ID column in target
-            const targetInfo = tables.get(targetTable);
-            const targetIdCol = targetInfo?.columns.find(c => 
-              c.primaryKey || 
-              c.name.toLowerCase() === column.name.toLowerCase() ||
-              c.name.toLowerCase() === 'id'
-            );
-            
-            if (targetIdCol) {
-              inferred.push({
-                fromColumn: column.name,
-                toTable: targetTable,
-                toColumn: targetIdCol.name,
-              });
-            }
-          }
-        }
-      }
-    }
-  }
-  
-  return inferred;
+async function fetchTableRows(tableName: string, limit = 50): Promise<{
+  columns: Array<{ name: string; type: string; pk: boolean }>;
+  rows: Record<string, unknown>[];
+}> {
+  const response = await fetch(`/api/table-rows?table=${encodeURIComponent(tableName)}&limit=${limit}`);
+  if (!response.ok) throw new Error(`Failed to fetch rows for ${tableName}`);
+  return response.json();
 }
 
 // ============ Public API ============
 
-export interface SqliteSchemaState {
-  db: SqlJsDatabase | null;
-  schema: LoadedSchema | null;
-  fileName: string | null;
-}
-
-let schemaState: SqliteSchemaState = {
-  db: null,
-  schema: null,
-  fileName: null,
-};
-
 /**
- * Load an SQLite file and parse its schema
+ * Load schema from the backend API
  */
-export async function loadSqliteSchema(file: File): Promise<LoadedSchema> {
-  console.log(`[SchemaParser] Loading schema from ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
+export async function loadSqliteSchema(): Promise<LoadedSchema> {
+  console.log('[SchemaParser] Loading schema from API...');
   
-  const sql = await initSQL();
-  const buffer = await file.arrayBuffer();
-  const data = new Uint8Array(buffer);
-  const db = new sql.Database(data);
-  
-  // Close previous DB if any
-  if (schemaState.db) {
-    schemaState.db.close();
-  }
-  
-  const tableNames = getAllTableNames(db);
+  const tableNames = await fetchTableList();
   console.log(`[SchemaParser] Found ${tableNames.length} tables`);
   
   const tables = new Map<string, TableInfo>();
   const groups = new Map<TableGroup, string[]>();
   const pairs = new Map<string, string>();
   
-  // First pass: gather basic info
+  // Fetch details for each table
   for (const name of tableNames) {
     const group = detectTableGroup(name);
     const variant = detectVariant(name);
     const pairedTable = findPairedTable(name, tableNames);
     
-    const columns = getTableColumns(db, name);
-    const foreignKeys = getTableForeignKeys(db, name);
-    const indexes = getTableIndexes(db, name);
-    const rowCount = getTableRowCount(db, name);
-    
-    const primaryKeys = columns.filter(c => c.primaryKey).map(c => c.name);
-    
-    tables.set(name, {
-      name,
-      columns,
-      primaryKeys,
-      foreignKeys,
-      indexes,
-      rowCount,
-      group,
-      variant,
-      pairedTable,
-    });
-    
-    // Add to group
-    if (!groups.has(group)) {
-      groups.set(group, []);
-    }
-    groups.get(group)!.push(name);
-    
-    // Track pairs
-    if (pairedTable) {
-      pairs.set(name, pairedTable);
-    }
-  }
-  
-  // Second pass: infer relationships
-  const inferredFKs = inferRelationships(tables);
-  for (const fk of inferredFKs) {
-    // Find which table this FK belongs to
-    for (const [tableName, tableInfo] of tables) {
-      if (tableInfo.columns.some(c => c.name === fk.fromColumn)) {
-        // Check if this FK already exists
-        const exists = tableInfo.foreignKeys.some(
-          existing => existing.fromColumn === fk.fromColumn && existing.toTable === fk.toTable
-        );
-        if (!exists) {
-          tableInfo.foreignKeys.push(fk);
-        }
+    try {
+      const data = await fetchTableRows(name, 10);
+      
+      const columns: ColumnInfo[] = data.columns.map(col => ({
+        name: col.name,
+        type: col.type,
+        nullable: !col.pk,
+        primaryKey: col.pk,
+        defaultValue: null,
+      }));
+      
+      const primaryKeys = columns.filter(c => c.primaryKey).map(c => c.name);
+      
+      tables.set(name, {
+        name,
+        columns,
+        primaryKeys,
+        foreignKeys: [],
+        indexes: [],
+        rowCount: data.rows.length, // Approximation
+        group,
+        variant,
+        pairedTable,
+      });
+      
+      // Cache sample rows
+      cachedSamples.set(name, data.rows.slice(0, 5));
+      
+      // Add to group
+      if (!groups.has(group)) {
+        groups.set(group, []);
       }
+      groups.get(group)!.push(name);
+      
+      // Track pairs
+      if (pairedTable) {
+        pairs.set(name, pairedTable);
+      }
+    } catch (e) {
+      console.warn(`[SchemaParser] Error loading table ${name}:`, e);
     }
   }
   
@@ -437,22 +220,10 @@ export async function loadSqliteSchema(file: File): Promise<LoadedSchema> {
     edges: [],
   };
   
-  for (const [tableName, tableInfo] of tables) {
-    for (const fk of tableInfo.foreignKeys) {
-      graph.edges.push({
-        from: tableName,
-        to: fk.toTable,
-        label: `${fk.fromColumn} → ${fk.toColumn}`,
-      });
-    }
-  }
-  
   const schema: LoadedSchema = { tables, groups, pairs, graph };
+  cachedSchema = schema;
   
-  // Store state
-  schemaState = { db, schema, fileName: file.name };
-  
-  console.log(`[SchemaParser] Schema loaded: ${tables.size} tables, ${graph.edges.length} relationships`);
+  console.log(`[SchemaParser] Schema loaded: ${tables.size} tables`);
   
   return schema;
 }
@@ -461,31 +232,32 @@ export async function loadSqliteSchema(file: File): Promise<LoadedSchema> {
  * Get the current loaded schema (if any)
  */
 export function getCurrentSchema(): LoadedSchema | null {
-  return schemaState.schema;
+  return cachedSchema;
 }
 
 /**
  * Get detailed info for a specific table
  */
 export function getTableDetails(tableName: string): TableInfo | null {
-  return schemaState.schema?.tables.get(tableName) || null;
+  return cachedSchema?.tables.get(tableName) || null;
 }
 
 /**
  * Get sample rows from a table
  */
 export function getTableSample(tableName: string, limit = 5): Record<string, unknown>[] {
-  if (!schemaState.db) return [];
-  return getSampleRows(schemaState.db, tableName, limit);
+  const cached = cachedSamples.get(tableName);
+  if (cached) return cached.slice(0, limit);
+  return [];
 }
 
 /**
  * Get all tables as summaries
  */
 export function getTableSummaries(): TableSummary[] {
-  if (!schemaState.schema) return [];
+  if (!cachedSchema) return [];
   
-  return Array.from(schemaState.schema.tables.values()).map(t => ({
+  return Array.from(cachedSchema.tables.values()).map(t => ({
     name: t.name,
     rowCount: t.rowCount,
     group: t.group,
@@ -502,14 +274,14 @@ export function getTablesByGroup(group: TableGroup): TableSummary[] {
 }
 
 /**
- * Get relationship hints for a table (common joins, export hints)
+ * Get relationship hints for a table
  */
 export function getTableHints(tableName: string): {
   commonJoins: string[];
   exportHints: string[];
   identifiers: string[];
 } {
-  const table = schemaState.schema?.tables.get(tableName);
+  const table = cachedSchema?.tables.get(tableName);
   if (!table) {
     return { commonJoins: [], exportHints: [], identifiers: [] };
   }
@@ -524,7 +296,6 @@ export function getTableHints(tableName: string): {
   
   const exportHints: string[] = [];
   
-  // Generate hints based on table group
   if (table.group === 'players') {
     exportHints.push('Include playernames table for display names');
     exportHints.push('Join with teamplayerlinks for team associations');
@@ -539,25 +310,30 @@ export function getTableHints(tableName: string): {
 }
 
 /**
- * Close the loaded database and clear state
+ * Clear cached schema
  */
 export function closeSqliteSchema(): void {
-  if (schemaState.db) {
-    schemaState.db.close();
-  }
-  schemaState = { db: null, schema: null, fileName: null };
+  cachedSchema = null;
+  cachedSamples.clear();
 }
 
 /**
  * Check if a schema is currently loaded
  */
 export function isSchemaLoaded(): boolean {
-  return schemaState.schema !== null;
+  return cachedSchema !== null;
 }
 
 /**
- * Get the current loaded file name
+ * Dummy function for compatibility (not used in API mode)
+ */
+export function getCurrentDb(): null {
+  return null;
+}
+
+/**
+ * Get the current loaded file name (not available in API mode)
  */
 export function getLoadedFileName(): string | null {
-  return schemaState.fileName;
+  return 'Remote Database';
 }
